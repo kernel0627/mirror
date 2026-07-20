@@ -14,7 +14,8 @@
 │       ├── 第二问.md             # 第二问正式优化与结果方案
 │       ├── q1-plan.md            # 第一问简版实施规格
 │       ├── q1-technical-notes.md # 第一问详细推导和数值说明
-│       └── q1-validation.md      # 第一问当前结果与收敛检查
+│       ├── q1-validation.md      # 第一问当前结果与收敛检查
+│       └── q2-technical-notes.md # 第二问完整推导与搜索细节
 ├── src/
 │   ├── heliostat/
 │   │   ├── solar.py              # 三问共用：太阳位置和 DNI
@@ -47,7 +48,8 @@
 ## 建模方案文档
 
 - `docs/questions/第一问.md`：第一问的固定镜场评价方案、正式结果、收敛验证以及与第二问的关系；
-- `docs/questions/第二问.md`：第二问的双布局优化方案、1 cm 安全余量、正式结果与加密验证。
+- `docs/questions/第二问.md`：正文版方案，明确同心圆简写、Campo 详写，并标注每张表和图片的数据来源；
+- `docs/questions/q2-technical-notes.md`：第二问的完整布局推导与搜索细节附件。
 
 两份文档是面向论文和交付的主方案；`q1-plan.md`、`q1-technical-notes.md` 和 `q1-validation.md` 保留为第一问的实施与推导附件。
 

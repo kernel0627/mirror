@@ -707,6 +707,7 @@ def build_question2_figures(
     configure_matplotlib()
     figure_dir = Path(output_dir)
     figure_dir.mkdir(parents=True, exist_ok=True)
+    write_monthly_comparison_data(figure_dir, evaluations)
     partitioned_parameters = parameters["partitioned"]
     campo_parameters = parameters["campo"]
     partitioned_evaluation = evaluations["partitioned"]
@@ -765,6 +766,46 @@ def build_question2_figures(
             campo_powers=campo_powers,
         ),
     )
+
+
+def write_monthly_comparison_data(
+    output_dir: str | Path,
+    evaluations: dict[str, FieldEvaluation],
+) -> Path:
+    """落盘图2-3使用的两种布局月度数据，便于论文逐项引用。"""
+
+    destination = Path(output_dir) / "15_双布局月平均对比数据.csv"
+    rows: list[dict[str, object]] = []
+    for kind, label in (
+        ("partitioned", "分区交错同心圆"),
+        ("campo", "改进 Campo"),
+    ):
+        for record in evaluations[kind].solution.monthly_results:
+            rows.append(
+                {
+                    "layout": kind,
+                    "layout_label": label,
+                    "month": record.month,
+                    "average_optical_efficiency": (record.average_optical_efficiency),
+                    "average_cosine_efficiency": (record.average_cosine_efficiency),
+                    "average_shadow_blocking_efficiency": (
+                        record.average_shadow_blocking_efficiency
+                    ),
+                    "average_atmospheric_efficiency": (
+                        record.average_atmospheric_efficiency
+                    ),
+                    "average_truncation_efficiency": (
+                        record.average_truncation_efficiency
+                    ),
+                    "field_output_mw": record.field_output_mw,
+                    "unit_area_output_kw_m2": (record.unit_area_output_kw_m2),
+                }
+            )
+    with destination.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    return destination
 
 
 def build_question2_figures_from_output(
