@@ -106,7 +106,6 @@ def _blocked_by_candidates(
     maximum_distance: float | None = None,
 ) -> NDArray[np.bool_]:
     blocked = np.zeros(origins.shape[0], dtype=bool)
-    config = prepared.config
 
     for candidate in candidates:
         active_indices = np.flatnonzero(~blocked)
@@ -119,8 +118,8 @@ def _blocked_by_candidates(
             rectangle_normal=orientation.normals[candidate],
             rectangle_width_axis=orientation.width_axes[candidate],
             rectangle_height_axis=orientation.height_axes[candidate],
-            half_width=config.mirror_width / 2.0,
-            half_height=config.mirror_height / 2.0,
+            half_width=prepared.mirror_widths[candidate] / 2.0,
+            half_height=prepared.mirror_heights[candidate] / 2.0,
             epsilon=solver.ray_epsilon,
             maximum_distance=maximum_distance,
         )
@@ -141,22 +140,32 @@ def calculate_shadow_blocking_efficiency(
     if mirror_count == 1:
         return np.ones(1, dtype=float)
 
-    config = prepared.config
-    offsets = mirror_grid_offsets(
-        solver.shadow_grid_size,
-        config.mirror_width,
-        config.mirror_height,
-    )
-    sample_count = offsets.shape[0]
     tree = cKDTree(prepared.centers[:, :2])
-    bounding_radius = 0.5 * np.hypot(
-        config.mirror_width,
-        config.mirror_height,
+    bounding_radii = 0.5 * np.hypot(
+        prepared.mirror_widths,
+        prepared.mirror_heights,
     )
-    reach = 2.0 * bounding_radius * solver.candidate_margin
+    maximum_bounding_radius = float(np.max(bounding_radii))
     efficiencies = np.empty(mirror_count, dtype=float)
+    offset_cache: dict[tuple[float, float], FloatArray] = {}
 
     for index in range(mirror_count):
+        size_key = (
+            float(prepared.mirror_widths[index]),
+            float(prepared.mirror_heights[index]),
+        )
+        offsets = offset_cache.get(size_key)
+        if offsets is None:
+            offsets = mirror_grid_offsets(
+                solver.shadow_grid_size,
+                size_key[0],
+                size_key[1],
+            )
+            offset_cache[size_key] = offsets
+        sample_count = offsets.shape[0]
+        reach = (
+            float(bounding_radii[index]) + maximum_bounding_radius
+        ) * solver.candidate_margin
         points = (
             prepared.centers[index][None, :]
             + offsets[:, :1] * orientation.width_axes[index][None, :]

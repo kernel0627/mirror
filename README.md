@@ -17,7 +17,10 @@
 │       ├── q1-plan.md            # 第一问简版实施规格
 │       ├── q1-technical-notes.md # 第一问详细推导和数值说明
 │       ├── q1-validation.md      # 第一问当前结果与收敛检查
-│       └── q2-technical-notes.md # 第二问完整推导与搜索细节
+│       ├── q2-technical-notes.md # 第二问完整推导与搜索细节
+│       ├── 第三问.md             # 第三问分组异构优化正文方案
+│       ├── 第三问公式说明.md     # 第三问逐镜异构模型与优化公式
+│       └── q3-technical-notes.md # 第三问实现接口、搜索与验证细节
 ├── src/
 │   ├── heliostat/
 │   │   ├── solar.py              # 三问共用：太阳位置和 DNI
@@ -29,16 +32,24 @@
 │   │   │   ├── aggregate.py      # 月平均、年平均
 │   │   │   ├── export.py         # 结果和论文表格输出
 │   │   │   └── plot.py           # 两张正式结果图
-│   │   └── q2/                   # 第二问双布局生成、评价与搜索
-│   │       ├── layout.py         # 分区圆环和改进 Campo
-│   │       ├── evaluate.py       # 复用问题一模型与外边界扫描
-│   │       ├── search.py         # 多起点循环变步长搜索
-│   │       ├── prune.py          # 外层对称镜位结构化修剪
-│   │       ├── export.py         # 结果文件与 result2.xlsx
-│   │       ├── plot.py           # 四张正式结果图
-│   │       └── solve.py          # 第二问命令行流程
+│   │   ├── q2/                   # 第二问双布局生成、评价与搜索
+│   │   │   ├── layout.py         # 分区圆环和改进 Campo
+│   │   │   ├── evaluate.py       # 复用问题一模型与外边界扫描
+│   │   │   ├── search.py         # 多起点循环变步长搜索
+│   │   │   ├── prune.py          # 外层对称镜位结构化修剪
+│   │   │   ├── export.py         # 结果文件与 result2.xlsx
+│   │   │   ├── plot.py           # 四张正式结果图
+│   │   │   └── solve.py          # 第二问命令行流程
+│   │   └── q3/                   # 第三问异构母场、搜索、删镜和输出
+│   │       ├── model.py          # 1471 面母场、六组规格和异构几何
+│   │       ├── evaluate.py       # 异构评价、精度配置和经验校准
+│   │       ├── search.py         # 高度、面积再分配和面积压缩搜索
+│   │       ├── prune.py          # 低贡献对称镜位结构化删镜
+│   │       ├── export.py         # 第三问结果和 result3.xlsx
+│   │       └── solve.py          # 第三问命令行流程
 │   ├── solve_q1.py               # 兼容命令行入口
-│   └── solve_q2.py               # 第二问兼容命令行入口
+│   ├── solve_q2.py               # 第二问兼容命令行入口
+│   └── solve_q3.py               # 第三问兼容命令行入口
 ├── tool/
 │   └── heliostat3DApp.py         # 交互式三维展示，不作为正式结果
 ├── tests/                         # 几何和物理不变量检查
@@ -54,8 +65,11 @@
 - `docs/questions/第二问.md`：正文版方案，明确同心圆简写、Campo 详写，并标注每张表和图片的数据来源；
 - `docs/questions/第二问公式说明.md`：第二问目标、约束、双布局生成、搜索、修剪和方案选择的完整公式系统；
 - `docs/questions/q2-technical-notes.md`：第二问的完整布局推导与搜索细节附件。
+- `docs/questions/第三问.md`：固定问题二 Campo 几何结构下的六组异构规格优化正文方案；
+- `docs/questions/第三问公式说明.md`：逐镜宽、高、安装高度、面积加权、经验校准和删镜公式；
+- `docs/questions/q3-technical-notes.md`：异构核心接口、六组映射、搜索动作和验证流程。
 
-`第一问.md` 和 `第二问.md` 是面向论文和交付的正文方案；两份“公式说明”负责集中列全公式，`q1-plan.md`、`q1-technical-notes.md`、`q1-validation.md` 和 `q2-technical-notes.md` 保留为实施、推导、搜索与验证附件。
+三份中文题目文档是面向论文和交付的正文方案；对应“公式说明”负责集中列全公式，`q1-plan.md`、`q1-technical-notes.md`、`q1-validation.md`、`q2-technical-notes.md` 和 `q3-technical-notes.md` 保留为实施、推导、搜索与验证附件。
 
 ## 环境安装
 
@@ -143,6 +157,39 @@ python src/solve_q2.py
 ```bash
 python outputs/q2/01_第二问完整代码.py --help
 ```
+
+## 第三问运行
+
+第三问固定问题二最终 Campo 塔位和镜心平面坐标，恢复最后删除的对称镜位，
+构造 1471 面完整母场，再对六个径向结构组联合优化镜面尺度和安装高度。
+
+先运行一个规定时刻的端到端烟雾测试：
+
+```bash
+python src/solve_q3.py \
+  --smoke \
+  --calibration-candidates 1 \
+  --max-cycles 1 \
+  --prune-rounds 0 \
+  --output /tmp/q3-smoke
+```
+
+烟雾测试验证异构评价、搜索和 `result3.xlsx` 输出链路，不能作为正式结果。
+正式搜索使用：
+
+```bash
+python src/solve_q3.py
+```
+
+增加 `--run-validation` 后，会对最终正式候选执行 `20×20` 阴影网格、
+512 条截断光线以及 80 m、100 m 邻镜半径的加密与敏感性复算。第三问
+正式运行需要多次评价完整 1471 面镜场，计算量高于单次问题二复算。
+
+当前正式方案保留 1471 面镜子，总镜面面积为 `60777.391 m²`，正式精度
+年平均输出为 `42.051608 MW`，单位面积输出为 `0.691896 kW/m²`；
+相对问题二最终方案提高约 `1.590%`。80 m 加密复算为
+`42.031084 MW`，扩大到 100 m 邻域后结果不变。正式交付文件见
+`outputs/q3/`。
 
 ## 三维工具
 

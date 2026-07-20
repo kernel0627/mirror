@@ -101,8 +101,8 @@ def calculate_truncation_efficiency(
 
     config = prepared.config
     samples = build_sobol_samples(solver.truncation_rays, solver.sobol_seed)
-    local_width = (samples[:, 0] - 0.5) * config.mirror_width
-    local_height = (samples[:, 1] - 0.5) * config.mirror_height
+    unit_width = samples[:, 0] - 0.5
+    unit_height = samples[:, 1] - 0.5
     sampled_sun = _sun_disk_directions(
         sun_direction,
         samples,
@@ -118,11 +118,19 @@ def calculate_truncation_efficiency(
         normals = orientation.normals[start:stop]
         width_axes = orientation.width_axes[start:stop]
         height_axes = orientation.height_axes[start:stop]
+        local_width = (
+            prepared.mirror_widths[start:stop, None]
+            * unit_width[None, :]
+        )
+        local_height = (
+            prepared.mirror_heights[start:stop, None]
+            * unit_height[None, :]
+        )
 
         origins = (
             centers[:, None, :]
-            + local_width[None, :, None] * width_axes[:, None, :]
-            + local_height[None, :, None] * height_axes[:, None, :]
+            + local_width[:, :, None] * width_axes[:, None, :]
+            + local_height[:, :, None] * height_axes[:, None, :]
         )
         incoming_chunk = np.broadcast_to(
             incoming[None, :, :],

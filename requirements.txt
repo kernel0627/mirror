@@ -1,5 +1,5 @@
 # Python >= 3.10
-# Q1/Q2 numerical solver, Excel delivery files, and paper figures
+# Q1/Q2/Q3 numerical solver, Excel delivery files, and paper figures
 numpy>=1.26
 scipy>=1.11
 openpyxl>=3.1

@@ -13,6 +13,7 @@ from heliostat.geometry import (
 from heliostat.shadow import calculate_shadow_blocking_efficiency
 from heliostat.solar import calculate_solar_state, day_from_spring_equinox
 from heliostat.truncation import calculate_truncation_efficiency
+from heliostat.q1.solve import evaluate_time
 
 
 class SolarTests(unittest.TestCase):
@@ -87,6 +88,98 @@ class GeometryTests(unittest.TestCase):
             solver,
         )
         self.assertGreaterEqual(float(large[0]), float(small[0]))
+
+    def test_equal_per_mirror_arrays_match_uniform_field(self) -> None:
+        coordinates = np.array(
+            [[120.0, 0.0], [140.0, 20.0]],
+            dtype=float,
+        )
+        config = FieldConfig()
+        uniform = prepare_field(coordinates, config)
+        heterogeneous = prepare_field(
+            coordinates,
+            config,
+            mirror_widths=np.full(2, config.mirror_width),
+            mirror_heights=np.full(2, config.mirror_height),
+            mirror_center_zs=np.full(2, config.mirror_center_z),
+        )
+
+        np.testing.assert_allclose(heterogeneous.centers, uniform.centers)
+        np.testing.assert_allclose(
+            heterogeneous.mirror_areas,
+            uniform.mirror_areas,
+        )
+        self.assertAlmostEqual(
+            heterogeneous.total_mirror_area,
+            uniform.total_mirror_area,
+        )
+
+        solver = SolverConfig(
+            shadow_grid_size=3,
+            truncation_rays=8,
+            calculate_shadow=False,
+            calculate_truncation=False,
+        )
+        uniform_result = evaluate_time(uniform, 6, 12.0, solver)
+        heterogeneous_result = evaluate_time(
+            heterogeneous,
+            6,
+            12.0,
+            solver,
+        )
+        self.assertAlmostEqual(
+            heterogeneous_result.field_output_mw,
+            uniform_result.field_output_mw,
+            places=14,
+        )
+        self.assertAlmostEqual(
+            heterogeneous_result.unit_area_output_kw_m2,
+            uniform_result.unit_area_output_kw_m2,
+            places=14,
+        )
+
+    def test_heterogeneous_power_uses_individual_areas(self) -> None:
+        coordinates = np.array(
+            [[120.0, 0.0], [140.0, 20.0]],
+            dtype=float,
+        )
+        field = prepare_field(
+            coordinates,
+            FieldConfig(),
+            mirror_widths=np.array([4.0, 8.0]),
+            mirror_heights=np.array([3.0, 5.0]),
+            mirror_center_zs=np.array([3.0, 5.0]),
+        )
+        solver = SolverConfig(
+            shadow_grid_size=3,
+            truncation_rays=8,
+            calculate_shadow=False,
+            calculate_truncation=False,
+        )
+        result = evaluate_time(field, 6, 12.0, solver)
+        solar = calculate_solar_state(6, 12.0, 39.4, 3.0)
+        orientation = calculate_orientation(field, solar.direction)
+        optical = (
+            orientation.cosine_efficiency
+            * field.atmospheric_efficiency
+            * field.config.reflectivity
+        )
+        expected_power_kw = float(
+            np.sum(solar.dni_kw_m2 * field.mirror_areas * optical)
+        )
+        expected_optical = float(
+            np.average(optical, weights=field.mirror_areas)
+        )
+
+        self.assertAlmostEqual(
+            result.field_output_mw,
+            expected_power_kw / 1000.0,
+        )
+        self.assertAlmostEqual(
+            result.average_optical_efficiency,
+            expected_optical,
+        )
+        self.assertAlmostEqual(field.total_mirror_area, 52.0)
 
 
 if __name__ == "__main__":

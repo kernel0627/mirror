@@ -140,7 +140,7 @@ def evaluate_time(
     ):
         _check_efficiency(name, values)
 
-    mirror_power_kw = solar.dni_kw_m2 * prepared.config.mirror_area * optical
+    mirror_power_kw = solar.dni_kw_m2 * prepared.mirror_areas * optical
     if mirror_sums is not None:
         mirror_sums["optical_efficiency_sum"] += optical
         mirror_sums["cosine_efficiency_sum"] += cosine
@@ -150,15 +150,26 @@ def evaluate_time(
         mirror_sums["output_power_kw_sum"] += mirror_power_kw
 
     field_power_kw = float(np.sum(mirror_power_kw))
+    area_weights = prepared.mirror_areas
     return TimeResult(
         month=month,
         solar_time=solar_time,
         dni_kw_m2=solar.dni_kw_m2,
-        average_optical_efficiency=float(np.mean(optical)),
-        average_cosine_efficiency=float(np.mean(cosine)),
-        average_shadow_blocking_efficiency=float(np.mean(shadow)),
-        average_atmospheric_efficiency=float(np.mean(atmospheric)),
-        average_truncation_efficiency=float(np.mean(truncation)),
+        average_optical_efficiency=float(
+            np.average(optical, weights=area_weights)
+        ),
+        average_cosine_efficiency=float(
+            np.average(cosine, weights=area_weights)
+        ),
+        average_shadow_blocking_efficiency=float(
+            np.average(shadow, weights=area_weights)
+        ),
+        average_atmospheric_efficiency=float(
+            np.average(atmospheric, weights=area_weights)
+        ),
+        average_truncation_efficiency=float(
+            np.average(truncation, weights=area_weights)
+        ),
         field_output_mw=field_power_kw / 1000.0,
         unit_area_output_kw_m2=field_power_kw / prepared.total_mirror_area,
         maximum_reflection_error=reflection_error,
