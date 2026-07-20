@@ -59,18 +59,7 @@ flowchart TD
 | 塔影 | 忽略 | 官方估算影响低于千分之一 | 可以忽略 |
 | 效率合成 | 各分项效率相乘 | 题目规定的乘积模型 | 完全一致 |
 
-阴影遮挡效率与截断效率分别计算，再按照题目给出的效率模型相乘：
-
-$$
-\eta_i=
-\eta_{\cos,i}
-\eta_{sb,i}
-\eta_{at,i}
-\eta_{\mathrm{trunc},i}
-\eta_{\mathrm{ref}}.
-$$
-
-没有必要把两者强行合并为一个规模很大的联合仿真。为了检查这一近似，可选择少量有代表性的定日镜进行联合光线追踪，并与分项计算结果比较。
+阴影遮挡效率与截断效率分别计算，再按照题目给出的效率模型相乘： $\eta_i= \eta_{\cos,i} \eta_{sb,i} \eta_{at,i} \eta_{\mathrm{trunc},i} \eta_{\mathrm{ref}}.$ 没有必要把两者强行合并为一个规模很大的联合仿真。为了检查这一近似，可选择少量有代表性的定日镜进行联合光线追踪，并与分项计算结果比较。
 
 ---
 
@@ -78,69 +67,11 @@ $$
 
 ### 3.1 镜场和集热器参数
 
-定日镜数量：
-
-$$
-N=1745.
-$$
-
-第 $i$ 面定日镜的地面坐标为 $(x_i,y_i)$，安装高度为 $4.5\ \mathrm{m}$，因此镜面中心为
-
-$$
-\boldsymbol c_i=(x_i,y_i,4.5).
-$$
-
-所有定日镜的尺寸均为
-
-$$
-6.2\ \mathrm{m}\times 6.2\ \mathrm{m},
-$$
-
-单镜面积为
-
-$$
-A_i=A=6.2^2=38.44\ \mathrm{m^2}.
-$$
-
-吸收塔位于坐标原点，圆柱形集热器中心为
-
-$$
-\boldsymbol C=(0,0,86).
-$$
-
-集热器半径为 $4\ \mathrm{m}$，高度为 $8\ \mathrm{m}$，其侧面满足
-
-$$
-x^2+y^2=4^2,\qquad 82\le z\le 90.
-$$
-
-镜面反射率取
-
-$$
-\eta_{\mathrm{ref}}=0.92.
-$$
-
-场址纬度和海拔分别为
-
-$$
-\varphi=39.4^\circ,\qquad H=3\ \mathrm{km}.
-$$
+定日镜数量： $N=1745.$ 第 $i$ 面定日镜的地面坐标为 $(x_i,y_i)$，安装高度为 $4.5\ \mathrm{m}$，因此镜面中心为 $\boldsymbol c_i=(x_i,y_i,4.5).$ 所有定日镜的尺寸均为 $6.2\ \mathrm{m}\times 6.2\ \mathrm{m},$ 单镜面积为 $A_i=A=6.2^2=38.44\ \mathrm{m^2}.$ 吸收塔位于坐标原点，圆柱形集热器中心为 $\boldsymbol C=(0,0,86).$ 集热器半径为 $4\ \mathrm{m}$，高度为 $8\ \mathrm{m}$，其侧面满足 $x^2+y^2=4^2,\qquad 82\le z\le 90.$ 镜面反射率取 $\eta_{\mathrm{ref}}=0.92.$ 场址纬度和海拔分别为 $\varphi=39.4^\circ,\qquad H=3\ \mathrm{km}.$
 
 ### 3.2 规定计算时刻
 
-题目要求计算每月 21 日以下五个当地时间：
-
-$$
-9{:}00,\quad 10{:}30,\quad 12{:}00,\quad 13{:}30,\quad 15{:}00.
-$$
-
-全年共计算
-
-$$
-12\times 5=60
-$$
-
-个时刻。
+题目要求计算每月 21 日以下五个当地时间： $9{:}00,\quad 10{:}30,\quad 12{:}00,\quad 13{:}30,\quad 15{:}00.$ 全年共计算 $12\times 5=60$ 个时刻。
 
 ### 3.3 方向约定
 
@@ -159,55 +90,13 @@ $$
 
 对每个规定时刻，按照题目附录依次计算日期序号、太阳赤纬角、太阳时角、太阳高度角、太阳方位角以及 DNI。
 
-太阳时角为
+太阳时角为 $\omega=\frac{\pi}{12}(ST-12),$ 其中 $ST$ 为以小时表示的当地太阳时，例如 $ST=10.5$ 表示 10:30。
 
-$$
-\omega=\frac{\pi}{12}(ST-12),
-$$
-
-其中 $ST$ 为以小时表示的当地太阳时，例如 $ST=10.5$ 表示 10:30。
-
-太阳高度角满足
-
-$$
-\sin\alpha_s
-=
-\cos\delta\cos\varphi\cos\omega
-+
-\sin\delta\sin\varphi.
-$$
-
-太阳方位角使用题目附录公式计算，并结合上午、下午确定正确象限。随后按照题目坐标系定义，将太阳高度角和方位角转换为单位向量
-
-$$
-\boldsymbol s=(s_x,s_y,s_z).
-$$
-
-DNI 按照题目附录给出的经验公式，由太阳高度角和海拔 $H=3\ \mathrm{km}$ 计算。若 DNI 的单位为 $\mathrm{kW/m^2}$，则后续计算得到的单镜功率单位为 $\mathrm{kW}$。
+太阳高度角满足 $\sin\alpha_s = \cos\delta\cos\varphi\cos\omega + \sin\delta\sin\varphi.$ 太阳方位角使用题目附录公式计算，并结合上午、下午确定正确象限。随后按照题目坐标系定义，将太阳高度角和方位角转换为单位向量 $\boldsymbol s=(s_x,s_y,s_z).$ DNI 按照题目附录给出的经验公式，由太阳高度角和海拔 $H=3\ \mathrm{km}$ 计算。若 DNI 的单位为 $\mathrm{kW/m^2}$，则后续计算得到的单镜功率单位为 $\mathrm{kW}$。
 
 ### 4.1 DNI 与镜面截获功率
 
-DNI 表示垂直于太阳光线的平面上单位面积接收到的太阳功率。由于镜面通常没有正对太阳，其对太阳光束的有效投影面积为
-
-$$
-A_{\mathrm{proj},i}=A_i\cos\theta_i.
-$$
-
-定义余弦效率
-
-$$
-\eta_{\cos,i}=\cos\theta_i,
-$$
-
-则定日镜在不考虑其他损失时截获的太阳功率为
-
-$$
-P_{\mathrm{capture},i}
-=
-DNI\cdot A_i\cdot\eta_{\cos,i}.
-$$
-
-因此不需要逐个模拟真实光子。DNI 给出光束单位横截面积的功率，$A_i\eta_{\cos,i}$ 给出镜面对光束的有效截面积，两者相乘即可得到理论截获功率。
+DNI 表示垂直于太阳光线的平面上单位面积接收到的太阳功率。由于镜面通常没有正对太阳，其对太阳光束的有效投影面积为 $A_{\mathrm{proj},i}=A_i\cos\theta_i.$ 定义余弦效率 $\eta_{\cos,i}=\cos\theta_i,$ 则定日镜在不考虑其他损失时截获的太阳功率为 $P_{\mathrm{capture},i} = DNI\cdot A_i\cdot\eta_{\cos,i}.$ 因此不需要逐个模拟真实光子。DNI 给出光束单位横截面积的功率，$A_i\eta_{\cos,i}$ 给出镜面对光束的有效截面积，两者相乘即可得到理论截获功率。
 
 ---
 
@@ -215,31 +104,11 @@ $$
 
 ### 5.1 指向集热器的方向
 
-第 $i$ 面定日镜中心指向集热器中心的单位向量为
-
-$$
-\boldsymbol r_i
-=
-\frac{\boldsymbol C-\boldsymbol c_i}
-{\left\|\boldsymbol C-\boldsymbol c_i\right\|}.
-$$
-
-由于镜场坐标和集热器位置固定，$\boldsymbol r_i$ 可以在程序开始时一次性计算。
+第 $i$ 面定日镜中心指向集热器中心的单位向量为 $\boldsymbol r_i = \frac{\boldsymbol C-\boldsymbol c_i} {\left\|\boldsymbol C-\boldsymbol c_i\right\|}.$ 由于镜场坐标和集热器位置固定，$\boldsymbol r_i$ 可以在程序开始时一次性计算。
 
 ### 5.2 镜面法向
 
-控制系统使太阳中心光线经过镜面中心反射后指向集热器中心。镜面法向是太阳方向和集热器方向的角平分线：
-
-$$
-\boxed{
-\boldsymbol n_i
-=
-\frac{\boldsymbol s+\boldsymbol r_i}
-{\left\|\boldsymbol s+\boldsymbol r_i\right\|}
-}
-$$
-
-设一般入射光传播方向为 $\boldsymbol d_{\mathrm{in}}$，则反射方向为
+控制系统使太阳中心光线经过镜面中心反射后指向集热器中心。镜面法向是太阳方向和集热器方向的角平分线： $\boxed{ \boldsymbol n_i = \frac{\boldsymbol s+\boldsymbol r_i} {\left\|\boldsymbol s+\boldsymbol r_i\right\|} }$ 设一般入射光传播方向为 $\boldsymbol d_{\mathrm{in}}$，则反射方向为
 
 $$
 \operatorname{reflect}
@@ -249,93 +118,17 @@ $$
 -2\left(\boldsymbol d_{\mathrm{in}}\cdot\boldsymbol n\right)\boldsymbol n.
 $$
 
-对于太阳中心光线，
-
-$$
-\boldsymbol d_{\mathrm{in}}=-\boldsymbol s,
-$$
-
-程序必须验证
-
-$$
-\operatorname{reflect}(-\boldsymbol s,\boldsymbol n_i)
-\approx
-\boldsymbol r_i.
-$$
+对于太阳中心光线， $\boldsymbol d_{\mathrm{in}}=-\boldsymbol s,$ 程序必须验证 $\operatorname{reflect}(-\boldsymbol s,\boldsymbol n_i) \approx \boldsymbol r_i.$
 
 ### 5.3 镜面局部坐标系
 
-设竖直方向为
-
-$$
-\boldsymbol k=(0,0,1).
-$$
-
-根据“镜面的上下两条边始终平行于地面”的约束，定义镜面水平方向
-
-$$
-\boldsymbol u_i
-=
-\frac{\boldsymbol k\times\boldsymbol n_i}
-{\left\|\boldsymbol k\times\boldsymbol n_i\right\|},
-$$
-
-镜面高度方向
-
-$$
-\boldsymbol v_i
-=
-\boldsymbol n_i\times\boldsymbol u_i.
-$$
-
-于是 $\boldsymbol u_i,\boldsymbol v_i,\boldsymbol n_i$ 构成镜面的局部正交基。镜面上的任意一点可写为
-
-$$
-\boldsymbol q_i(a,b)
-=
-\boldsymbol c_i
-+a\boldsymbol u_i
-+b\boldsymbol v_i,
-$$
-
-其中
-
-$$
--3.1\le a\le 3.1,\qquad
--3.1\le b\le 3.1.
-$$
-
-镜面的四个顶点为
-
-$$
-\boldsymbol c_i
-\pm 3.1\boldsymbol u_i
-\pm 3.1\boldsymbol v_i.
-$$
-
-若数值上出现 $\boldsymbol n_i$ 与 $\boldsymbol k$ 近似平行的极端情况，应为局部坐标系设置备用参考轴，避免叉积模长接近零。
+设竖直方向为 $\boldsymbol k=(0,0,1).$ 根据“镜面的上下两条边始终平行于地面”的约束，定义镜面水平方向 $\boldsymbol u_i = \frac{\boldsymbol k\times\boldsymbol n_i} {\left\|\boldsymbol k\times\boldsymbol n_i\right\|},$ 镜面高度方向 $\boldsymbol v_i = \boldsymbol n_i\times\boldsymbol u_i.$ 于是 $\boldsymbol u_i,\boldsymbol v_i,\boldsymbol n_i$ 构成镜面的局部正交基。镜面上的任意一点可写为 $\boldsymbol q_i(a,b) = \boldsymbol c_i +a\boldsymbol u_i +b\boldsymbol v_i,$ 其中 $-3.1\le a\le 3.1,\qquad -3.1\le b\le 3.1.$ 镜面的四个顶点为 $\boldsymbol c_i \pm 3.1\boldsymbol u_i \pm 3.1\boldsymbol v_i.$ 若数值上出现 $\boldsymbol n_i$ 与 $\boldsymbol k$ 近似平行的极端情况，应为局部坐标系设置备用参考轴，避免叉积模长接近零。
 
 ---
 
 ## 6. 余弦效率
 
-由于 $\boldsymbol s$ 和 $\boldsymbol n_i$ 均为单位向量，第 $i$ 面定日镜的余弦效率为
-
-$$
-\boxed{
-\eta_{\cos,i}
-=
-\boldsymbol s\cdot\boldsymbol n_i
-}
-$$
-
-镜面的理论截获功率为
-
-$$
-P_{\mathrm{capture},i}
-=
-DNI\cdot A_i\cdot\eta_{\cos,i}.
-$$
+由于 $\boldsymbol s$ 和 $\boldsymbol n_i$ 均为单位向量，第 $i$ 面定日镜的余弦效率为 $\boxed{ \eta_{\cos,i} = \boldsymbol s\cdot\boldsymbol n_i }$ 镜面的理论截获功率为 $P_{\mathrm{capture},i} = DNI\cdot A_i\cdot\eta_{\cos,i}.$
 
 ---
 
@@ -350,53 +143,17 @@ $$
 
 ### 7.1 镜面网格采样
 
-将第 $i$ 面定日镜划分为 $n_g\times n_g$ 个等面积网格，并在每个网格中心取一个采样点：
-
-$$
-\boldsymbol q_{ip}
-=
-\boldsymbol c_i
-+a_p\boldsymbol u_i
-+b_p\boldsymbol v_i.
-$$
-
-所有采样点代表相同面积，因此可以直接通过有效点比例估计效率。
+将第 $i$ 面定日镜划分为 $n_g\times n_g$ 个等面积网格，并在每个网格中心取一个采样点： $\boldsymbol q_{ip} = \boldsymbol c_i +a_p\boldsymbol u_i +b_p\boldsymbol v_i.$ 所有采样点代表相同面积，因此可以直接通过有效点比例估计效率。
 
 ### 7.2 入射阴影判定
 
-从采样点沿着指向太阳的方向发射射线：
-
-$$
-\boldsymbol L_s(\lambda)
-=
-\boldsymbol q_{ip}
-+\lambda\boldsymbol s,
-\qquad \lambda>0.
-$$
-
-若该射线在前方与其他定日镜相交，则采样点看不到太阳，判定为发生入射阴影。
+从采样点沿着指向太阳的方向发射射线： $\boldsymbol L_s(\lambda) = \boldsymbol q_{ip} +\lambda\boldsymbol s, \qquad \lambda>0.$ 若该射线在前方与其他定日镜相交，则采样点看不到太阳，判定为发生入射阴影。
 
 ### 7.3 反射遮挡判定
 
-从采样点沿中心太阳光的反射方向发射射线：
+从采样点沿中心太阳光的反射方向发射射线： $\boldsymbol L_r(\lambda) = \boldsymbol q_{ip} +\lambda\boldsymbol r_i, \qquad \lambda>0.$ 若射线在到达集热器以前与其他定日镜相交，则判定为发生反射遮挡。
 
-$$
-\boldsymbol L_r(\lambda)
-=
-\boldsymbol q_{ip}
-+\lambda\boldsymbol r_i,
-\qquad \lambda>0.
-$$
-
-若射线在到达集热器以前与其他定日镜相交，则判定为发生反射遮挡。
-
-反射遮挡只允许统计满足
-
-$$
-0<t<t_{\mathrm{receiver}}
-$$
-
-的交点。位于集热器之后的定日镜不能被误判为遮挡物。
+反射遮挡只允许统计满足 $0<t<t_{\mathrm{receiver}}$ 的交点。位于集热器之后的定日镜不能被误判为遮挡物。
 
 ### 7.4 合并两种损失
 
@@ -410,18 +167,7 @@ V_{ip}=
 \end{cases}
 $$
 
-阴影遮挡效率为
-
-$$
-\boxed{
-\eta_{sb,i}
-=
-\frac{1}{N_g}
-\sum_{p=1}^{N_g}V_{ip}
-}
-$$
-
-两类损失必须在采样点层面取并集，不能直接把阴影比例和遮挡比例相加，因为同一个采样点可能同时发生两种损失。
+阴影遮挡效率为 $\boxed{ \eta_{sb,i} = \frac{1}{N_g} \sum_{p=1}^{N_g}V_{ip} }$ 两类损失必须在采样点层面取并集，不能直接把阴影比例和遮挡比例相加，因为同一个采样点可能同时发生两种损失。
 
 ### 7.5 塔影处理
 
@@ -431,62 +177,17 @@ $$
 
 ## 8. 射线与矩形定日镜求交
 
-设待检测射线为
+设待检测射线为 $\boldsymbol p(t)=\boldsymbol q+t\boldsymbol d,$ 待检测的第 $j$ 面定日镜由 $\boldsymbol c_j,\quad \boldsymbol n_j,\quad \boldsymbol u_j,\quad \boldsymbol v_j$ 描述。
 
-$$
-\boldsymbol p(t)=\boldsymbol q+t\boldsymbol d,
-$$
-
-待检测的第 $j$ 面定日镜由
-
-$$
-\boldsymbol c_j,\quad
-\boldsymbol n_j,\quad
-\boldsymbol u_j,\quad
-\boldsymbol v_j
-$$
-
-描述。
-
-射线与镜面所在平面的交点参数为
-
-$$
-t=
-\frac{
-\left(\boldsymbol c_j-\boldsymbol q\right)\cdot\boldsymbol n_j
-}{
-\boldsymbol d\cdot\boldsymbol n_j
-}.
-$$
-
-实现时按以下步骤判断：
+射线与镜面所在平面的交点参数为 $t= \frac{ \left(\boldsymbol c_j-\boldsymbol q\right)\cdot\boldsymbol n_j }{ \boldsymbol d\cdot\boldsymbol n_j }.$ 实现时按以下步骤判断：
 
 1. 若 $|\boldsymbol d\cdot\boldsymbol n_j|<\varepsilon$，则射线与镜面近似平行，不相交；
 2. 若 $t\le\varepsilon$，则交点不在射线前方，或属于射线起点附近的自相交，应舍弃；
-3. 否则计算交点
+3. 否则计算交点 $\boldsymbol p=\boldsymbol q+t\boldsymbol d;$
 
-   $$
-   \boldsymbol p=\boldsymbol q+t\boldsymbol d;
-   $$
+4. 将交点转换到第 $j$ 面镜子的局部坐标： $a=(\boldsymbol p-\boldsymbol c_j)\cdot\boldsymbol u_j,$ $b=(\boldsymbol p-\boldsymbol c_j)\cdot\boldsymbol v_j;$
 
-4. 将交点转换到第 $j$ 面镜子的局部坐标：
-
-   $$
-   a=(\boldsymbol p-\boldsymbol c_j)\cdot\boldsymbol u_j,
-   $$
-
-   $$
-   b=(\boldsymbol p-\boldsymbol c_j)\cdot\boldsymbol v_j;
-   $$
-
-5. 若
-
-   $$
-   |a|\le 3.1+\varepsilon,\qquad
-   |b|\le 3.1+\varepsilon,
-   $$
-
-   则射线与矩形镜面相交。
+5. 若 $|a|\le 3.1+\varepsilon,\qquad |b|\le 3.1+\varepsilon,$ 则射线与矩形镜面相交。
 
 检测第 $i$ 面镜子的光线时必须排除 $j=i$，并统一设置较小的数值容差 $\varepsilon$，避免镜面自身被错误识别为遮挡物。
 
@@ -494,23 +195,11 @@ $$
 
 ## 9. 邻镜搜索与计算加速
 
-若每面定日镜都检查其余 1744 面镜子，阴影遮挡部分的计算量约为
-
-$$
-60\times1745\times1744\times N_g,
-$$
-
-不能直接使用全量暴力循环。
+若每面定日镜都检查其余 1744 面镜子，阴影遮挡部分的计算量约为 $60\times1745\times1744\times N_g,$ 不能直接使用全量暴力循环。
 
 ### 9.1 KDTree 候选筛选
 
-对定日镜中心的平面坐标建立 `cKDTree`，每次只检查一定半径内的候选镜。搜索半径可先取
-
-$$
-R_{\mathrm{search}}=50\sim60\ \mathrm{m},
-$$
-
-但最终必须通过收敛实验验证，例如比较：
+对定日镜中心的平面坐标建立 `cKDTree`，每次只检查一定半径内的候选镜。搜索半径可先取 $R_{\mathrm{search}}=50\sim60\ \mathrm{m},$ 但最终必须通过收敛实验验证，例如比较：
 
 | 搜索半径 | 年平均阴影遮挡效率 |
 | ---: | ---: |
@@ -545,27 +234,7 @@ $$
 
 ## 10. 大气透射率
 
-第 $i$ 面定日镜中心到集热器中心的距离为
-
-$$
-d_{HR,i}
-=
-\left\|\boldsymbol C-\boldsymbol c_i\right\|.
-$$
-
-大气透射率按照题目给定的经验公式计算：
-
-$$
-\boxed{
-\eta_{at,i}
-=
-0.99321
--0.0001176d_{HR,i}
-+1.97\times10^{-8}d_{HR,i}^2
-}
-$$
-
-问题一中定日镜位置和集热器位置固定，因此 $d_{HR,i}$ 与 $\eta_{at,i}$ 均可以在程序开始时预计算，不需要在 60 个时刻重复求值。
+第 $i$ 面定日镜中心到集热器中心的距离为 $d_{HR,i} = \left\|\boldsymbol C-\boldsymbol c_i\right\|.$ 大气透射率按照题目给定的经验公式计算： $\boxed{ \eta_{at,i} = 0.99321 -0.0001176d_{HR,i} +1.97\times10^{-8}d_{HR,i}^2 }$ 问题一中定日镜位置和集热器位置固定，因此 $d_{HR,i}$ 与 $\eta_{at,i}$ 均可以在程序开始时预计算，不需要在 60 个时刻重复求值。
 
 ---
 
@@ -582,51 +251,11 @@ $$
 
 ### 11.1 镜面位置采样
 
-生成
-
-$$
-\xi_1,\xi_2\sim U(0,1),
-$$
-
-并令
-
-$$
-a=6.2(\xi_1-0.5),\qquad
-b=6.2(\xi_2-0.5).
-$$
-
-镜面上的均匀采样点为
-
-$$
-\boldsymbol q
-=
-\boldsymbol c_i
-+a\boldsymbol u_i
-+b\boldsymbol v_i.
-$$
+生成 $\xi_1,\xi_2\sim U(0,1),$ 并令 $a=6.2(\xi_1-0.5),\qquad b=6.2(\xi_2-0.5).$ 镜面上的均匀采样点为 $\boldsymbol q = \boldsymbol c_i +a\boldsymbol u_i +b\boldsymbol v_i.$
 
 ### 11.2 太阳圆盘方向采样
 
-围绕太阳中心方向 $\boldsymbol s$ 构造两个与其正交的单位向量
-
-$$
-\boldsymbol e_1,\boldsymbol e_2.
-$$
-
-设太阳角半径为 $\theta_\odot$。生成
-
-$$
-\xi_3,\xi_4\sim U(0,1),
-$$
-
-取
-
-$$
-\rho=\theta_\odot\sqrt{\xi_3},\qquad
-\phi=2\pi\xi_4.
-$$
-
-$\sqrt{\xi_3}$ 用于保证样本在太阳视圆面内近似按面积均匀分布。太阳采样方向可构造为
+围绕太阳中心方向 $\boldsymbol s$ 构造两个与其正交的单位向量 $\boldsymbol e_1,\boldsymbol e_2.$ 设太阳角半径为 $\theta_\odot$。生成 $\xi_3,\xi_4\sim U(0,1),$ 取 $\rho=\theta_\odot\sqrt{\xi_3},\qquad \phi=2\pi\xi_4.$ $\sqrt{\xi_3}$ 用于保证样本在太阳视圆面内近似按面积均匀分布。太阳采样方向可构造为
 
 $$
 \boldsymbol s_k
@@ -646,135 +275,28 @@ $$
 
 ### 11.3 反射方向
 
-第 $k$ 条采样光线的入射传播方向为
-
-$$
-\boldsymbol d_{\mathrm{in},k}=-\boldsymbol s_k.
-$$
-
-反射方向为
-
-$$
-\boxed{
-\boldsymbol d_{\mathrm{out},k}
-=
-\boldsymbol d_{\mathrm{in},k}
--2
-\left(
-\boldsymbol d_{\mathrm{in},k}\cdot\boldsymbol n_i
-\right)
-\boldsymbol n_i
-}
-$$
-
-需要注意：定日镜法向 $\boldsymbol n_i$ 由太阳圆盘中心方向确定，不会针对每一条采样锥光重新调整。
+第 $k$ 条采样光线的入射传播方向为 $\boldsymbol d_{\mathrm{in},k}=-\boldsymbol s_k.$ 反射方向为 $\boxed{ \boldsymbol d_{\mathrm{out},k} = \boldsymbol d_{\mathrm{in},k} -2 \left( \boldsymbol d_{\mathrm{in},k}\cdot\boldsymbol n_i \right) \boldsymbol n_i }$ 需要注意：定日镜法向 $\boldsymbol n_i$ 由太阳圆盘中心方向确定，不会针对每一条采样锥光重新调整。
 
 ---
 
 ## 12. 射线与圆柱集热器求交
 
-反射射线为
-
-$$
-\boldsymbol p(t)
-=
-\boldsymbol q+t\boldsymbol d_{\mathrm{out}},
-\qquad t>0.
-$$
-
-记
-
-$$
-\boldsymbol q=(q_x,q_y,q_z),\qquad
-\boldsymbol d_{\mathrm{out}}=(d_x,d_y,d_z).
-$$
-
-将射线代入圆柱侧面方程
-
-$$
-(q_x+td_x)^2+(q_y+td_y)^2=16,
-$$
-
-得到
-
-$$
-At^2+Bt+C=0,
-$$
-
-其中
-
-$$
-A=d_x^2+d_y^2,
-$$
-
-$$
-B=2(q_xd_x+q_yd_y),
-$$
-
-$$
-C=q_x^2+q_y^2-16.
-$$
-
-判定步骤如下：
+反射射线为 $\boldsymbol p(t) = \boldsymbol q+t\boldsymbol d_{\mathrm{out}}, \qquad t>0.$ 记 $\boldsymbol q=(q_x,q_y,q_z),\qquad \boldsymbol d_{\mathrm{out}}=(d_x,d_y,d_z).$ 将射线代入圆柱侧面方程 $(q_x+td_x)^2+(q_y+td_y)^2=16,$ 得到 $At^2+Bt+C=0,$ 其中 $A=d_x^2+d_y^2,$ $B=2(q_xd_x+q_yd_y),$ $C=q_x^2+q_y^2-16.$ 判定步骤如下：
 
 1. 若 $A$ 近似为零，则射线近似平行于圆柱轴，不能命中圆柱侧面；
 2. 计算判别式 $\Delta=B^2-4AC$，若 $\Delta<0$，则不相交；
 3. 计算两个实根，取其中最小的正根 $t_{\mathrm{hit}}$；
-4. 计算交点高度
+4. 计算交点高度 $z_{\mathrm{hit}}=q_z+t_{\mathrm{hit}}d_z;$
 
-   $$
-   z_{\mathrm{hit}}=q_z+t_{\mathrm{hit}}d_z;
-   $$
+5. 若 $82\le z_{\mathrm{hit}}\le90,$ 则射线命中集热器侧面，否则判定为截断损失。
 
-5. 若
-
-   $$
-   82\le z_{\mathrm{hit}}\le90,
-   $$
-
-   则射线命中集热器侧面，否则判定为截断损失。
-
-若联合采样 $N_r$ 条光线，其中 $N_{\mathrm{hit}}$ 条命中集热器，则
-
-$$
-\boxed{
-\eta_{\mathrm{trunc},i}
-=
-\frac{N_{\mathrm{hit}}}{N_r}
-}
-$$
-
-推荐使用 Sobol 准随机序列，并固定采样设计，使结果稳定、可复现，且不同镜面之间的比较更加公平。
+若联合采样 $N_r$ 条光线，其中 $N_{\mathrm{hit}}$ 条命中集热器，则 $\boxed{ \eta_{\mathrm{trunc},i} = \frac{N_{\mathrm{hit}}}{N_r} }$ 推荐使用 Sobol 准随机序列，并固定采样设计，使结果稳定、可复现，且不同镜面之间的比较更加公平。
 
 ---
 
 ## 13. 单镜效率与输出功率
 
-第 $i$ 面定日镜在时刻 $t$ 的总光学效率为
-
-$$
-\boxed{
-\eta_i(t)
-=
-\eta_{\cos,i}(t)
-\eta_{sb,i}(t)
-\eta_{at,i}
-\eta_{\mathrm{trunc},i}(t)
-\eta_{\mathrm{ref}}
-}
-$$
-
-最终进入集热器的单镜功率为
-
-$$
-\boxed{
-P_i(t)
-=
-DNI(t)\,A_i\,\eta_i(t)
-}
-$$
-
-能量传递链为：
+第 $i$ 面定日镜在时刻 $t$ 的总光学效率为 $\boxed{ \eta_i(t) = \eta_{\cos,i}(t) \eta_{sb,i}(t) \eta_{at,i} \eta_{\mathrm{trunc},i}(t) \eta_{\mathrm{ref}} }$ 最终进入集热器的单镜功率为 $\boxed{ P_i(t) = DNI(t)\,A_i\,\eta_i(t) }$ 能量传递链为：
 
 ```text
 DNI × 镜面真实面积
@@ -790,33 +312,11 @@ DNI × 镜面真实面积
 最终进入集热器的功率
 ```
 
-其中，落到有效镜面区域的功率可以写为
-
-$$
-P_{\mathrm{effective\ incident},i}
-=
-DNI\cdot A_i
-\cdot\eta_{\cos,i}
-\cdot\eta_{sb,i}.
-$$
+其中，落到有效镜面区域的功率可以写为 $P_{\mathrm{effective\ incident},i} = DNI\cdot A_i \cdot\eta_{\cos,i} \cdot\eta_{sb,i}.$
 
 ### 13.1 能量算例
 
-假设某面定日镜在某时刻满足
-
-$$
-DNI=0.9\ \mathrm{kW/m^2},\quad
-\eta_{\cos}=0.80,\quad
-\eta_{sb}=0.90,
-$$
-
-$$
-\eta_{\mathrm{ref}}=0.92,\quad
-\eta_{at}=0.97,\quad
-\eta_{\mathrm{trunc}}=0.95.
-$$
-
-则：
+假设某面定日镜在某时刻满足 $DNI=0.9\ \mathrm{kW/m^2},\quad \eta_{\cos}=0.80,\quad \eta_{sb}=0.90,$ $\eta_{\mathrm{ref}}=0.92,\quad \eta_{at}=0.97,\quad \eta_{\mathrm{trunc}}=0.95.$ 则：
 
 | 阶段 | 功率 |
 | --- | ---: |
@@ -827,142 +327,25 @@ $$
 | 大气传播后 | $22.91\times0.97=22.22\ \mathrm{kW}$ |
 | 截断以后 | $22.22\times0.95=21.11\ \mathrm{kW}$ |
 
-因此该定日镜最终送入集热器的功率约为
-
-$$
-P_i\approx21.11\ \mathrm{kW}.
-$$
+因此该定日镜最终送入集热器的功率约为 $P_i\approx21.11\ \mathrm{kW}.$
 
 ---
 
 ## 14. 镜场时刻指标
 
-镜场总镜面面积为
+镜场总镜面面积为 $A_{\mathrm{total}} = \sum_{i=1}^{1745}A_i = 1745\times38.44.$ 某时刻的镜场输出功率为 $\boxed{ E_{\mathrm{field}}(t) = \sum_{i=1}^{1745}P_i(t) = DNI(t) \sum_{i=1}^{1745}A_i\eta_i(t) }$ 时刻平均余弦效率为 $\overline{\eta}_{\cos}(t) = \frac{ \sum_i A_i\eta_{\cos,i}(t) }{ \sum_i A_i }.$ 同理可计算 $\overline{\eta}_{sb}(t),\qquad \overline{\eta}_{\mathrm{trunc}}(t).$ 时刻平均光学效率为 $\boxed{ \overline{\eta}_{\mathrm{opt}}(t) = \frac{ \sum_i A_i\eta_i(t) }{ \sum_i A_i } }$ 由于第一问中所有定日镜面积相同，上述面积加权平均与算术平均相同。但在程序结构中仍建议保留面积加权形式，以便后续问题直接复用。
 
-$$
-A_{\mathrm{total}}
-=
-\sum_{i=1}^{1745}A_i
-=
-1745\times38.44.
-$$
+需要特别注意： $\overline{\eta}_{\mathrm{opt}} \ne \overline{\eta}_{\cos} \overline{\eta}_{sb} \overline{\eta}_{at} \overline{\eta}_{\mathrm{trunc}} \eta_{\mathrm{ref}}.$ 正确做法是先计算每面定日镜的效率乘积，再对单镜总效率做面积加权平均。
 
-某时刻的镜场输出功率为
-
-$$
-\boxed{
-E_{\mathrm{field}}(t)
-=
-\sum_{i=1}^{1745}P_i(t)
-=
-DNI(t)
-\sum_{i=1}^{1745}A_i\eta_i(t)
-}
-$$
-
-时刻平均余弦效率为
-
-$$
-\overline{\eta}_{\cos}(t)
-=
-\frac{
-\sum_i A_i\eta_{\cos,i}(t)
-}{
-\sum_i A_i
-}.
-$$
-
-同理可计算
-
-$$
-\overline{\eta}_{sb}(t),\qquad
-\overline{\eta}_{\mathrm{trunc}}(t).
-$$
-
-时刻平均光学效率为
-
-$$
-\boxed{
-\overline{\eta}_{\mathrm{opt}}(t)
-=
-\frac{
-\sum_i A_i\eta_i(t)
-}{
-\sum_i A_i
-}
-}
-$$
-
-由于第一问中所有定日镜面积相同，上述面积加权平均与算术平均相同。但在程序结构中仍建议保留面积加权形式，以便后续问题直接复用。
-
-需要特别注意：
-
-$$
-\overline{\eta}_{\mathrm{opt}}
-\ne
-\overline{\eta}_{\cos}
-\overline{\eta}_{sb}
-\overline{\eta}_{at}
-\overline{\eta}_{\mathrm{trunc}}
-\eta_{\mathrm{ref}}.
-$$
-
-正确做法是先计算每面定日镜的效率乘积，再对单镜总效率做面积加权平均。
-
-单位镜面面积输出功率为
-
-$$
-\boxed{
-q(t)
-=
-\frac{E_{\mathrm{field}}(t)}
-{A_{\mathrm{total}}}
-}
-$$
+单位镜面面积输出功率为 $\boxed{ q(t) = \frac{E_{\mathrm{field}}(t)} {A_{\mathrm{total}}} }$
 
 ---
 
 ## 15. 月平均与年平均
 
-设第 $m$ 月第 $k$ 个规定时刻的镜场输出功率为 $E_{m,k}$。第 $m$ 月五个时刻的平均输出功率为
+设第 $m$ 月第 $k$ 个规定时刻的镜场输出功率为 $E_{m,k}$。第 $m$ 月五个时刻的平均输出功率为 $\overline E_m = \frac{1}{5} \sum_{k=1}^{5}E_{m,k}.$ 其他效率指标也先在各时刻完成镜场平均，再对五个时刻等权平均。
 
-$$
-\overline E_m
-=
-\frac{1}{5}
-\sum_{k=1}^{5}E_{m,k}.
-$$
-
-其他效率指标也先在各时刻完成镜场平均，再对五个时刻等权平均。
-
-全年平均输出功率为
-
-$$
-\overline E_{\mathrm{year}}
-=
-\frac{1}{12}
-\sum_{m=1}^{12}\overline E_m
-=
-\frac{1}{60}
-\sum_{m=1}^{12}
-\sum_{k=1}^{5}E_{m,k}.
-$$
-
-不能用
-
-$$
-\text{平均 DNI}\times\text{平均光学效率}
-$$
-
-代替平均功率。必须先在每个时刻计算
-
-$$
-E(t)
-=
-DNI(t)\sum_iA_i\eta_i(t),
-$$
-
-再对 $E(t)$ 求平均。
+全年平均输出功率为 $\overline E_{\mathrm{year}} = \frac{1}{12} \sum_{m=1}^{12}\overline E_m = \frac{1}{60} \sum_{m=1}^{12} \sum_{k=1}^{5}E_{m,k}.$ 不能用 $\text{平均 DNI}\times\text{平均光学效率}$ 代替平均功率。必须先在每个时刻计算 $E(t) = DNI(t)\sum_iA_i\eta_i(t),$ 再对 $E(t)$ 求平均。
 
 ---
 
@@ -1153,17 +536,7 @@ write_result_tables()
 
 ### 阶段一：太阳位置、DNI、镜面姿态和余弦效率
 
-首先实现太阳位置、DNI、集热器方向、镜面法向和局部坐标系，并验证
-
-$$
-\left\|
-\operatorname{reflect}(-\boldsymbol s,\boldsymbol n_i)
--\boldsymbol r_i
-\right\|
-<10^{-8}.
-$$
-
-这一步不正确时，不进入后续模块。
+首先实现太阳位置、DNI、集热器方向、镜面法向和局部坐标系，并验证 $\left\| \operatorname{reflect}(-\boldsymbol s,\boldsymbol n_i) -\boldsymbol r_i \right\| <10^{-8}.$ 这一步不正确时，不进入后续模块。
 
 ### 阶段二：大气透射率和镜面反射率
 
@@ -1196,33 +569,15 @@ $$
 
 ### 20.1 反射方向检查
 
-对每面定日镜验证
-
-$$
-\left\|
-\operatorname{reflect}(-\boldsymbol s,\boldsymbol n_i)
--\boldsymbol r_i
-\right\|
-<10^{-8}.
-$$
+对每面定日镜验证 $\left\| \operatorname{reflect}(-\boldsymbol s,\boldsymbol n_i) -\boldsymbol r_i \right\| <10^{-8}.$
 
 ### 20.2 效率范围检查
 
-所有效率均应满足
-
-$$
-0\le\eta\le1.
-$$
-
-超出范围通常意味着方向约定、面积归一化或数值容差存在错误。
+所有效率均应满足 $0\le\eta\le1.$ 超出范围通常意味着方向约定、面积归一化或数值容差存在错误。
 
 ### 20.3 中心光线检查
 
-镜面中心处的太阳中心光线经反射后必须指向
-
-$$
-\boldsymbol C=(0,0,86).
-$$
+镜面中心处的太阳中心光线经反射后必须指向 $\boldsymbol C=(0,0,86).$
 
 ### 20.4 自相交检查
 
@@ -1313,34 +668,4 @@ $$
 
 ## 22. 最终结论
 
-第一问最终采用
-
-$$
-\boxed{
-\text{太阳位置解析计算}
-+
-\text{镜面姿态向量计算}
-+
-\text{网格阴影遮挡光线追踪}
-+
-\text{太阳锥光联合采样截断追踪}
-}
-$$
-
-单面定日镜的完整能量模型为
-
-$$
-\boxed{
-P_i(t)
-=
-DNI(t)
-\cdot A_i
-\cdot\eta_{\cos,i}(t)
-\cdot\eta_{sb,i}(t)
-\cdot\eta_{at,i}
-\cdot\eta_{\mathrm{trunc},i}(t)
-\cdot\eta_{\mathrm{ref}}
-}
-$$
-
-这套方案与官方讲评及优秀论文采用的主流路线一致，不需要更换模型。后续工作的重点是正确实现反射、射线—矩形求交和射线—圆柱求交三个基础几何模块，并通过原题复现、采样收敛和搜索半径收敛证明结果可靠。
+第一问最终采用 $\boxed{ \text{太阳位置解析计算} + \text{镜面姿态向量计算} + \text{网格阴影遮挡光线追踪} + \text{太阳锥光联合采样截断追踪} }$ 单面定日镜的完整能量模型为 $\boxed{ P_i(t) = DNI(t) \cdot A_i \cdot\eta_{\cos,i}(t) \cdot\eta_{sb,i}(t) \cdot\eta_{at,i} \cdot\eta_{\mathrm{trunc},i}(t) \cdot\eta_{\mathrm{ref}} }$ 这套方案与官方讲评及优秀论文采用的主流路线一致，不需要更换模型。后续工作的重点是正确实现反射、射线—矩形求交和射线—圆柱求交三个基础几何模块，并通过原题复现、采样收敛和搜索半径收敛证明结果可靠。

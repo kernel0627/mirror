@@ -1,0 +1,90 @@
+[
+  {
+    "stage": "q2-uniform",
+    "profile": "q3-medium",
+    "mirror_count": 1469,
+    "total_area_m2": 61732.82984744687,
+    "annual_power_mw": 41.97489300024631,
+    "unit_area_power_kw_m2": 0.6799444169977946
+  },
+  {
+    "stage": "height-only",
+    "profile": "q3-medium",
+    "mirror_count": 1469,
+    "total_area_m2": 61732.82984744687,
+    "annual_power_mw": 42.162029790403245,
+    "unit_area_power_kw_m2": 0.6829758152119925
+  },
+  {
+    "stage": "fixed-area-reallocation",
+    "profile": "q3-medium",
+    "mirror_count": 1469,
+    "total_area_m2": 61732.82984744687,
+    "annual_power_mw": 42.24122986509581,
+    "unit_area_power_kw_m2": 0.6842587642504262
+  },
+  {
+    "stage": "area-compression",
+    "profile": "q3-medium",
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.05334763161205,
+    "unit_area_power_kw_m2": 0.6860174126101379
+  },
+  {
+    "stage": "campo-monotone-azimuth",
+    "profile": "q3-medium",
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.05334763161205,
+    "unit_area_power_kw_m2": 0.6860174126101379
+  },
+  {
+    "stage": "campo-relaxed",
+    "profile": "q3-medium",
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.11282458524456,
+    "unit_area_power_kw_m2": 0.6869876617850273
+  },
+  {
+    "stage": "formal-q2-uniform",
+    "profile": "q3-formal",
+    "mirror_count": 1469,
+    "total_area_m2": 61732.82984744687,
+    "annual_power_mw": 42.04423775741984,
+    "unit_area_power_kw_m2": 0.6810677213618566
+  },
+  {
+    "stage": "formal-campo-monotone-radial",
+    "profile": "q3-formal",
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.112457960016634,
+    "unit_area_power_kw_m2": 0.6869816810176348
+  },
+  {
+    "stage": "formal-campo-monotone-azimuth",
+    "profile": "q3-formal",
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.112457960016634,
+    "unit_area_power_kw_m2": 0.6869816810176348
+  },
+  {
+    "stage": "formal-campo-relaxed",
+    "profile": "q3-formal",
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.170954488067196,
+    "unit_area_power_kw_m2": 0.687935936483132
+  },
+  {
+    "stage": "formal-final",
+    "profile": "q3-formal",
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.170954488067196,
+    "unit_area_power_kw_m2": 0.687935936483132
+  }
+]

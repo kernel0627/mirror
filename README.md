@@ -20,7 +20,8 @@
 │       ├── q2-technical-notes.md # 第二问完整推导与搜索细节
 │       ├── 第三问.md             # 第三问分组异构优化正文方案
 │       ├── 第三问公式说明.md     # 第三问逐镜异构模型与优化公式
-│       └── q3-technical-notes.md # 第三问实现接口、搜索与验证细节
+│       ├── q3-technical-notes.md # 第三问实现接口、搜索与验证细节
+│       └── q3_continuous/        # 独立 Campo 连续参数化文档
 ├── src/
 │   ├── heliostat/
 │   │   ├── solar.py              # 三问共用：太阳位置和 DNI
@@ -40,22 +41,26 @@
 │   │   │   ├── export.py         # 结果文件与 result2.xlsx
 │   │   │   ├── plot.py           # 四张正式结果图
 │   │   │   └── solve.py          # 第二问命令行流程
-│   │   └── q3/                   # 第三问异构母场、搜索、删镜和输出
-│   │       ├── model.py          # 1471 面母场、六组规格和异构几何
-│   │       ├── evaluate.py       # 异构评价、精度配置和经验校准
-│   │       ├── search.py         # 高度、面积再分配和面积压缩搜索
-│   │       ├── prune.py          # 低贡献对称镜位结构化删镜
-│   │       ├── export.py         # 第三问结果和 result3.xlsx
-│   │       └── solve.py          # 第三问命令行流程
+│   │   ├── q3/                   # 原六组第三问实现
+│   │   │   ├── model.py          # 1471 面母场、六组规格和异构几何
+│   │   │   ├── evaluate.py       # 异构评价、精度配置和经验校准
+│   │   │   ├── search.py         # 高度、面积再分配和面积压缩搜索
+│   │   │   ├── prune.py          # 低贡献对称镜位结构化删镜
+│   │   │   ├── export.py         # 第三问结果和 result3.xlsx
+│   │   │   └── solve.py          # 第三问命令行流程
+│   │   └── q3_continuous/        # 独立 Campo 连续参数化实现
 │   ├── solve_q1.py               # 兼容命令行入口
 │   ├── solve_q2.py               # 第二问兼容命令行入口
-│   └── solve_q3.py               # 第三问兼容命令行入口
+│   ├── solve_q3.py               # 原六组第三问入口
+│   └── solve_q3_continuous.py    # Campo 连续参数化独立入口
 ├── tool/
 │   └── heliostat3DApp.py         # 交互式三维展示，不作为正式结果
 ├── tests/                         # 几何和物理不变量检查
 └── outputs/
     ├── q1/                        # 第一问扁平交付包
-    └── q2/                        # 第二问扁平交付包
+    ├── q2/                        # 第二问扁平交付包
+    ├── q3/                        # 原六组第三问正式输出
+    └── q3_continuous/            # Campo 连续参数化独立输出
 ```
 
 ## 建模方案文档
@@ -68,6 +73,8 @@
 - `docs/questions/第三问.md`：固定问题二 Campo 几何结构下的六组异构规格优化正文方案；
 - `docs/questions/第三问公式说明.md`：逐镜宽、高、安装高度、面积加权、经验校准和删镜公式；
 - `docs/questions/q3-technical-notes.md`：异构核心接口、六组映射、搜索动作和验证流程。
+- `docs/questions/q3_continuous/`：不覆盖原六组方案的 Campo 区域—行号连续
+  参数化正文、公式和独立实现说明。
 
 三份中文题目文档是面向论文和交付的正文方案；对应“公式说明”负责集中列全公式，`q1-plan.md`、`q1-technical-notes.md`、`q1-validation.md`、`q2-technical-notes.md` 和 `q3-technical-notes.md` 保留为实施、推导、搜索与验证附件。
 
@@ -190,6 +197,26 @@ python src/solve_q3.py
 相对问题二最终方案提高约 `1.590%`。80 m 加密复算为
 `42.031084 MW`，扩大到 100 m 邻域后结果不变。正式交付文件见
 `outputs/q3/`。
+
+## 第三问 Campo 连续参数化独立实验
+
+原六组第三问继续保留在 `src/heliostat/q3/`、
+`docs/questions/第三问*.md` 和 `outputs/q3/`；额外快照位于
+`backups/q3-six-group-20260721/`。
+
+连续方案不人工切分六组，直接使用 Campo 区域、区内行号和可选同环方位
+特征。独立运行：
+
+```bash
+conda run -n agent env PYTHONPATH=src \
+python src/solve_q3_continuous.py
+```
+
+正式结果保留 1469 面镜子，总面积为 `61300.700 m²`，年平均输出为
+`42.170954 MW`，单位面积输出为 `0.687936 kW/m²`。加密复算为
+`42.178822 MW` 和 `0.688064 kW/m²`。该结果优于问题二统一规格，但当前
+预算下仍低于原六组方案的 `0.691896 kW/m²`。独立输出位于
+`outputs/q3_continuous/`。
 
 ## 三维工具
 

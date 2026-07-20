@@ -1,0 +1,44 @@
+{
+  "profile": {
+    "months": 12,
+    "solar_times_per_month": 5,
+    "shadow_grid_size": 20,
+    "truncation_rays": 512,
+    "neighbor_radius_m": 80.0
+  },
+  "mirror_count": 1469,
+  "total_area_m2": 61300.700038514726,
+  "annual_power_constraint_mw": 42.0,
+  "annual_power_mw": 42.17882171693291,
+  "annual_power_margin_mw": 0.17882171693290871,
+  "unit_area_power_kw_m2": 0.6880642748032617,
+  "constraint_satisfied": true,
+  "neighbor_radius_sensitivity": [
+    {
+      "profile": {
+        "months": 12,
+        "solar_times_per_month": 5,
+        "shadow_grid_size": 20,
+        "truncation_rays": 512,
+        "neighbor_radius_m": 80.0
+      },
+      "annual_power_mw": 42.17882171693291,
+      "annual_power_margin_mw": 0.17882171693290871,
+      "unit_area_power_kw_m2": 0.6880642748032617,
+      "constraint_satisfied": true
+    },
+    {
+      "profile": {
+        "months": 12,
+        "solar_times_per_month": 5,
+        "shadow_grid_size": 20,
+        "truncation_rays": 512,
+        "neighbor_radius_m": 100.0
+      },
+      "annual_power_mw": 42.17882171693291,
+      "annual_power_margin_mw": 0.17882171693290871,
+      "unit_area_power_kw_m2": 0.6880642748032617,
+      "constraint_satisfied": true
+    }
+  ]
+}

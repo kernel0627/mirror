@@ -1,0 +1,29 @@
+{
+  "profile": "q3-formal",
+  "q2_formal_1469": {
+    "mirror_count": 1469,
+    "total_area_m2": 61732.829847446854,
+    "annual_power_mw": 42.04423775741984,
+    "unit_area_power_kw_m2": 0.6810677213618567
+  },
+  "continuous_1469": {
+    "mirror_count": 1469,
+    "total_area_m2": 61300.700038514726,
+    "annual_power_mw": 42.170954488067196,
+    "unit_area_power_kw_m2": 0.687935936483132
+  },
+  "full_prefix_uniform_1471": {
+    "mirror_count": 1471,
+    "total_area_m2": 61816.877267252785,
+    "annual_power_mw": 42.09450358442311,
+    "unit_area_power_kw_m2": 0.6809548693706415
+  },
+  "full_prefix_same_continuous_parameters_1471": {
+    "mirror_count": 1471,
+    "total_area_m2": 61384.159126382,
+    "annual_power_mw": 42.22274177394632,
+    "unit_area_power_kw_m2": 0.6878442642997713
+  },
+  "selection": "continuous_1469",
+  "reason": "The 1469-mirror field has the larger formal unit-area output under the same continuous parameters."
+}

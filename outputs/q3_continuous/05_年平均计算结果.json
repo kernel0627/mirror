@@ -1,0 +1,9 @@
+{
+  "average_optical_efficiency": 0.7092989323906261,
+  "average_cosine_efficiency": 0.8428259737330979,
+  "average_shadow_blocking_efficiency": 0.976410377027319,
+  "average_atmospheric_efficiency": 0.959751279592946,
+  "average_truncation_efficiency": 0.9781317278022722,
+  "field_output_mw": 42.170954488067196,
+  "unit_area_output_kw_m2": 0.687935936483132
+}
