@@ -1,23 +1,18 @@
-"""独立第三问命令行：Campo 连续规格搜索、消融、复算和输出。"""
+"""五节点 Campo 连续模型的三初值收敛搜索与最终验收。"""
 
 from __future__ import annotations
 
 import argparse
-import json
+import csv
 from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
-import numpy as np
-
 from .evaluate import (
     EvaluationCache,
-    EvaluationProfile,
     HeterogeneousEvaluation,
-    coarse_profile,
     dense_profile,
-    evaluate_specifications,
-    field_config_from_mother,
+    evaluate_design,
     formal_profile,
     medium_profile,
     smoke_profile,
@@ -25,16 +20,11 @@ from .evaluate import (
 from .export import write_dense_validation, write_question3_results
 from .model import (
     CampoMotherField,
-    ContinuousDesign,
-    ExpandedSpecifications,
+    SplineDesign,
     build_campo_mother_field,
+    fit_spline_design,
 )
-from .prune import prune_symmetric_pairs
-from .search import (
-    SearchOutcome,
-    optimize_continuous_design,
-    refine_design_parameters,
-)
+from .search import MultiStartOutcome, optimize_three_starts
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -42,14 +32,12 @@ DEFAULT_Q2_SUMMARY = PROJECT_ROOT / "outputs" / "q2" / "07_最终方案摘要.js
 DEFAULT_Q2_COORDINATES = (
     PROJECT_ROOT / "outputs" / "q2" / "03_最终镜位坐标.csv"
 )
-DEFAULT_TEMPLATE = PROJECT_ROOT / "task" / "A" / "result3.xlsx"
 DEFAULT_OUTPUT = PROJECT_ROOT / "outputs" / "q3_continuous"
-LEGACY_Q3_OUTPUT = PROJECT_ROOT / "outputs" / "q3"
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="求解 CUMCM 2023 A 题第三问的 Campo 连续异构镜场"
+        description="求解第三问五节点径向连续 Campo 异构镜场"
     )
     parser.add_argument(
         "--q2-summary",
@@ -61,452 +49,293 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_Q2_COORDINATES,
     )
-    parser.add_argument(
-        "--full-campo-prefix",
-        action="store_true",
-        help="使用修剪前 1471 面 Campo 前缀，而不是问题二正式 1469 面镜场。",
-    )
-    parser.add_argument(
-        "--result3-template",
-        type=Path,
-        default=DEFAULT_TEMPLATE,
-    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--target-power", type=float, default=42.0)
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument(
-        "--target-power",
-        type=float,
-        default=42.0,
-    )
-    parser.add_argument(
-        "--max-cycles",
-        type=int,
-        default=2,
-    )
-    parser.add_argument(
-        "--azimuth-mode",
-        choices=("auto", "on", "off"),
-        default="auto",
-    )
-    parser.add_argument("--skip-relaxed", action="store_true")
-    parser.add_argument(
-        "--prune-rounds",
-        type=int,
-        default=1,
-    )
-    parser.add_argument(
-        "--prune-pairs-per-round",
+        "--max-joint-cycles",
         type=int,
         default=8,
     )
-    parser.add_argument("--run-validation", action="store_true")
+    parser.add_argument(
+        "--max-rounds-per-step",
+        type=int,
+        default=40,
+    )
+    parser.add_argument(
+        "--convergence-q",
+        type=float,
+        default=1e-5,
+    )
+    parser.add_argument(
+        "--move-q",
+        type=float,
+        default=1e-7,
+    )
     return parser
 
 
 def _validate_args(args: argparse.Namespace) -> None:
     if args.target_power <= 0.0:
         raise SystemExit("--target-power 必须大于 0。")
-    if args.max_cycles < 0:
-        raise SystemExit("--max-cycles 不能小于 0。")
-    if args.prune_rounds < 0:
-        raise SystemExit("--prune-rounds 不能小于 0。")
-    if args.prune_pairs_per_round < 1:
-        raise SystemExit("--prune-pairs-per-round 必须大于等于 1。")
+    if args.workers < 1:
+        raise SystemExit("--workers 必须大于等于 1。")
+    if args.max_joint_cycles < 1:
+        raise SystemExit("--max-joint-cycles 必须大于等于 1。")
+    if args.max_rounds_per_step < 2:
+        raise SystemExit("--max-rounds-per-step 必须大于等于 2。")
+    if args.convergence_q <= 0.0 or args.move_q < 0.0:
+        raise SystemExit("收敛阈值必须为正，移动阈值不能为负。")
 
 
-def _specifications_from_evaluation(
-    source: HeterogeneousEvaluation,
+def _previous_projection(
     mother: CampoMotherField,
-) -> ExpandedSpecifications:
-    scales = source.widths / mother.base_width
-    return ExpandedSpecifications(
-        widths=source.widths,
-        heights=source.heights,
-        installation_heights=source.installation_heights,
-        areas=source.widths * source.heights,
-        scales=scales,
-        size_shape=np.log(scales),
-        area_normalizer=1.0,
+    output_dir: Path,
+) -> SplineDesign:
+    candidates = (
+        output_dir / "02_逐镜最终参数.csv",
+        output_dir / "03_最终逐镜参数与坐标.csv",
+    )
+    for path in candidates:
+        if not path.exists():
+            continue
+        widths: list[float] = []
+        heights: list[float] = []
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if reader.fieldnames is None:
+                continue
+            z_column = (
+                "installation_height_m"
+                if "installation_height_m" in reader.fieldnames
+                else "z_m"
+            )
+            if not {"mirror_width_m", z_column} <= set(
+                reader.fieldnames
+            ):
+                continue
+            for row in reader:
+                widths.append(float(row["mirror_width_m"]))
+                heights.append(float(row[z_column]))
+        if len(widths) != mother.mirror_count:
+            continue
+        projected = fit_spline_design(
+            mother,
+            widths=widths,
+            installation_heights=heights,
+        )
+        return SplineDesign(
+            size_nodes=projected.size_nodes,
+            height_nodes=projected.height_nodes,
+            area_scale=1.0,
+        ).canonical()
+    return SplineDesign.uniform(mother.base_installation_height)
+
+
+def _initial_designs(
+    mother: CampoMotherField,
+    previous: SplineDesign,
+) -> tuple[tuple[str, SplineDesign], ...]:
+    uniform = SplineDesign.uniform(mother.base_installation_height)
+    weak = SplineDesign(
+        size_nodes=tuple(-0.01 * (index - 2) for index in range(5)),
+        height_nodes=tuple(
+            mother.base_installation_height + 0.1 * (index - 2)
+            for index in range(5)
+        ),
+        area_scale=1.0,
+    ).canonical()
+    return (
+        ("uniform", uniform),
+        ("previous_projection", previous),
+        ("weak_engineering", weak),
     )
 
 
-def _reevaluate(
+def _formal_selection(
     *,
-    source: HeterogeneousEvaluation,
-    profile: EvaluationProfile,
     mother: CampoMotherField,
-    cache: EvaluationCache,
-) -> HeterogeneousEvaluation:
-    return evaluate_specifications(
-        coordinates=source.coordinates,
-        specifications=_specifications_from_evaluation(source, mother),
-        ring_indices=source.ring_indices,
-        zone_indices=source.zone_indices,
-        zone_row_indices=source.zone_row_indices,
-        normalized_rows=source.normalized_rows,
-        azimuth_angles=source.azimuth_angles,
-        azimuth_features=source.azimuth_features,
-        nominal_ring_counts=source.nominal_ring_counts,
-        actual_ring_counts=source.actual_ring_counts,
-        original_indices=source.original_indices,
-        field_config=field_config_from_mother(mother),
-        profile=profile,
-        safety_epsilon=mother.parameters.safety_epsilon,
-        cache=cache,
-    )
-
-
-def _load_legacy_comparison(output: Path) -> dict | None:
-    path = output / "07_最终方案摘要.json"
-    if not path.exists():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    if payload.get("layout") != "fixed-q2-campo-heterogeneous":
-        legacy_path = output / "11_原六组对照结果.json"
-        if legacy_path.exists():
-            try:
-                return json.loads(legacy_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                return None
-        return None
-    return {
-        "model": "legacy-six-ring-groups",
-        "role": "comparison-only",
-        "mirror_count": payload.get("mirror_count"),
-        "total_area_m2": payload.get("total_area_m2"),
-        "group_design": payload.get("group_design"),
-        "annual": payload.get("annual"),
-        "geometry": payload.get("geometry"),
-    }
-
-
-def _formal_candidates(
-    *,
-    candidates: Sequence[
-        tuple[str, ContinuousDesign, HeterogeneousEvaluation]
-    ],
-    pruned: HeterogeneousEvaluation,
-    pruned_design: ContinuousDesign,
-    mother: CampoMotherField,
-    profile: EvaluationProfile,
+    search: MultiStartOutcome,
     target_power_mw: float,
-    cache: EvaluationCache,
 ) -> tuple[
     str,
-    ContinuousDesign,
+    SplineDesign,
     HeterogeneousEvaluation,
     tuple[tuple[str, HeterogeneousEvaluation], ...],
 ]:
-    formal: list[
-        tuple[str, ContinuousDesign, HeterogeneousEvaluation]
-    ] = []
-    for name, design, evaluation in candidates:
-        formal.append(
-            (
-                name,
-                design,
-                _reevaluate(
-                    source=evaluation,
-                    profile=profile,
-                    mother=mother,
-                    cache=cache,
-                ),
-            )
+    cache = EvaluationCache()
+    profile = formal_profile()
+    candidates = tuple(
+        (
+            outcome.start_name,
+            outcome.best_design,
+            evaluate_design(
+                mother=mother,
+                design=outcome.best_design,
+                profile=profile,
+                cache=cache,
+            ),
         )
-    if not any(
-        np.array_equal(pruned.original_indices, evaluation.original_indices)
-        for _, _, evaluation in candidates
-    ):
-        formal.append(
-            (
-                "outer-boundary-pruned",
-                pruned_design,
-                _reevaluate(
-                    source=pruned,
-                    profile=profile,
-                    mother=mother,
-                    cache=cache,
-                ),
-            )
-        )
+        for outcome in search.starts
+    )
     feasible = [
-        item
-        for item in formal
-        if item[2].is_feasible(target_power_mw)
+        candidate
+        for candidate in candidates
+        if candidate[2].is_feasible(target_power_mw)
     ]
     if not feasible:
         powers = ", ".join(
             f"{name}={evaluation.annual_power_mw:.6f}"
-            for name, _, evaluation in formal
+            for name, _, evaluation in candidates
         )
         raise RuntimeError(
-            "正式精度下没有满足功率约束的候选："
-            f"{powers} MW。"
+            "三个收敛方案在正式精度下均不满足 42 MW："
+            f"{powers}。"
         )
-    best = max(
+    selected = max(
         feasible,
         key=lambda item: item[2].unit_area_power_kw_m2,
     )
     return (
-        best[0],
-        best[1],
-        best[2],
-        tuple((f"formal-{name}", evaluation) for name, _, evaluation in formal),
+        selected[0],
+        selected[1],
+        selected[2],
+        tuple((name, evaluation) for name, _, evaluation in candidates),
     )
+
+
+def _clean_generated_files(output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for child in output_dir.iterdir():
+        if child.is_file():
+            child.unlink()
 
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _validate_args(args)
-    legacy_comparison = _load_legacy_comparison(LEGACY_Q3_OUTPUT)
-    selected_coordinates = (
-        None if args.full_campo_prefix else args.q2_coordinates
-    )
     mother = build_campo_mother_field(
         args.q2_summary,
-        selected_coordinates_path=selected_coordinates,
+        selected_coordinates_path=args.q2_coordinates,
     )
-    cache = EvaluationCache()
-    if args.smoke:
-        coarse = smoke_profile()
-        reference = smoke_profile()
-        final = smoke_profile()
-        maximum_cycles = min(args.max_cycles, 1)
-        prune_rounds = min(args.prune_rounds, 1)
-        prune_pairs = min(args.prune_pairs_per_round, 2)
-    else:
-        coarse = coarse_profile()
-        reference = medium_profile()
-        final = formal_profile()
-        maximum_cycles = args.max_cycles
-        prune_rounds = args.prune_rounds
-        prune_pairs = args.prune_pairs_per_round
+    previous = _previous_projection(mother, args.output)
+    starts = _initial_designs(mother, previous)
+    search_profile = smoke_profile() if args.smoke else medium_profile()
+    maximum_joint_cycles = (
+        min(args.max_joint_cycles, 2)
+        if args.smoke
+        else args.max_joint_cycles
+    )
 
     print(
-        f"读取 Campo 镜场：{mother.mirror_count} 面，"
-        f"区域镜数={mother.zone_counts}，"
-        f"区域环数={mother.zone_ring_counts}"
+        "固定问题二 Campo 镜场："
+        f"{mother.mirror_count} 面，"
+        f"控制环={mother.control_ring_indices}，"
+        f"控制半径={tuple(round(value, 3) for value in mother.control_radii)}",
+        flush=True,
     )
-    radial: SearchOutcome = optimize_continuous_design(
+    search = optimize_three_starts(
         mother=mother,
-        coarse_profile=coarse,
-        reference_profile=reference,
+        initial_designs=starts,
+        profile=search_profile,
         target_power_mw=args.target_power,
-        include_azimuth=False,
-        monotone=True,
-        maximum_cycles_per_level=maximum_cycles,
-        cache=cache,
-        progress=print,
+        move_q_threshold=args.move_q,
+        convergence_q_threshold=args.convergence_q,
+        maximum_joint_cycles=maximum_joint_cycles,
+        maximum_rounds_per_step=args.max_rounds_per_step,
+        workers=args.workers,
+        progress=lambda message: print(message, flush=True),
     )
-    model_candidates: list[
-        tuple[str, ContinuousDesign, HeterogeneousEvaluation]
-    ] = [
+
+    if args.smoke:
+        selected_start = search.best_start_name
+        selected_design = search.best_design
+        selected = search.best_evaluation
+        formal_evaluations = tuple(
+            (outcome.start_name, outcome.best_evaluation)
+            for outcome in search.starts
+        )
+    else:
         (
-            "q2-uniform",
-            radial.baseline_design,
-            radial.baseline_evaluation,
-        ),
-        (
-            "campo-monotone-radial",
-            radial.best_design,
-            radial.best_evaluation,
-        ),
-    ]
-    stages = list(radial.stage_evaluations)
-    current_design = radial.best_design
-    current_evaluation = radial.best_evaluation
-    current_name = "campo-monotone-radial"
-
-    use_azimuth = (
-        args.azimuth_mode == "on"
-        or (
-            args.azimuth_mode == "auto"
-            and radial.diagnostics.azimuth_recommended
-        )
-    )
-    if use_azimuth:
-        current_design, current_evaluation, _ = refine_design_parameters(
+            selected_start,
+            selected_design,
+            selected,
+            formal_evaluations,
+        ) = _formal_selection(
             mother=mother,
-            initial_design=current_design,
-            coarse_profile=coarse,
-            reference_profile=reference,
-            parameters=("size_azimuth",),
-            steps=(0.04, 0.02, 0.01),
-            stage="azimuth-size",
+            search=search,
             target_power_mw=args.target_power,
-            monotone=True,
-            maximum_cycles_per_level=maximum_cycles,
-            cache=cache,
-            progress=print,
         )
-        current_design, current_evaluation, _ = refine_design_parameters(
-            mother=mother,
-            initial_design=current_design,
-            coarse_profile=coarse,
-            reference_profile=reference,
-            parameters=("height_azimuth",),
-            steps=(0.4, 0.2, 0.1),
-            stage="azimuth-height",
-            target_power_mw=args.target_power,
-            monotone=True,
-            maximum_cycles_per_level=maximum_cycles,
-            cache=cache,
-            progress=print,
-        )
-        current_name = "campo-monotone-azimuth"
-        model_candidates.append(
-            (current_name, current_design, current_evaluation)
-        )
-        stages.append((current_name, current_evaluation))
 
-    if not args.skip_relaxed:
-        relaxed_design, relaxed_evaluation, _ = refine_design_parameters(
-            mother=mother,
-            initial_design=current_design,
-            coarse_profile=coarse,
-            reference_profile=reference,
-            parameters=(
-                "size_zone1_slope",
-                "size_zone2_slope",
-            ),
-            steps=(0.02, 0.01),
-            stage="relaxed-size",
-            target_power_mw=args.target_power,
-            monotone=False,
-            maximum_cycles_per_level=maximum_cycles,
-            cache=cache,
-            progress=print,
-        )
-        relaxed_design, relaxed_evaluation, _ = refine_design_parameters(
-            mother=mother,
-            initial_design=relaxed_design,
-            coarse_profile=coarse,
-            reference_profile=reference,
-            parameters=(
-                "height_zone1_slope",
-                "height_zone2_slope",
-            ),
-            steps=(0.2, 0.1),
-            stage="relaxed-height",
-            target_power_mw=args.target_power,
-            monotone=False,
-            maximum_cycles_per_level=maximum_cycles,
-            cache=cache,
-            progress=print,
-        )
-        model_candidates.append(
-            (
-                "campo-relaxed",
-                relaxed_design,
-                relaxed_evaluation,
-            )
-        )
-        stages.append(("campo-relaxed", relaxed_evaluation))
-        if (
-            relaxed_evaluation.is_feasible(args.target_power)
-            and relaxed_evaluation.unit_area_power_kw_m2
-            > current_evaluation.unit_area_power_kw_m2
-        ):
-            current_name = "campo-relaxed"
-            current_design = relaxed_design
-            current_evaluation = relaxed_evaluation
-
-    pruned = current_evaluation
-    if prune_rounds and pruned.is_feasible(args.target_power):
-        pruning = prune_symmetric_pairs(
-            mother=mother,
-            initial=pruned,
-            profile=reference,
-            target_power_mw=args.target_power,
-            maximum_rounds=prune_rounds,
-            maximum_pairs_per_round=prune_pairs,
-            cache=cache,
-        )
-        pruned = pruning.best
-        print(
-            f"外边界对称删镜接受 {len(pruning.steps)} 轮，"
-            f"保留 {pruned.mirror_count} 面"
-        )
-        if pruning.steps:
-            stages.append(("outer-boundary-pruned", pruned))
-
-    (
-        selected_name,
-        selected_design,
-        selected,
-        formal_stages,
-    ) = _formal_candidates(
-        candidates=model_candidates,
-        pruned=pruned,
-        pruned_design=current_design,
-        mother=mother,
-        profile=final,
-        target_power_mw=args.target_power,
-        cache=cache,
-    )
-    stages.extend(formal_stages)
-    stages.append(("formal-final", selected))
-
+    _clean_generated_files(args.output)
     written = write_question3_results(
         output_dir=args.output,
         mother=mother,
         design=selected_design,
         evaluation=selected,
-        result3_template=args.result3_template,
-        stages=stages,
-        diagnostics=radial.diagnostics,
-        model_name=selected_name,
-        legacy_comparison=legacy_comparison,
+        search=search,
+        selected_start_name=selected_start,
+        formal_evaluations=formal_evaluations,
     )
-    if args.run_validation and not args.smoke:
-        dense_settings = dense_profile()
-        dense = _reevaluate(
-            source=selected,
-            profile=dense_settings,
-            mother=mother,
-            cache=cache,
-        )
-        sensitivity_settings = replace(
-            dense_settings,
-            name="q3-dense-100m",
+
+    if not args.smoke:
+        dense80 = dense_profile()
+        dense100 = replace(
+            dense80,
+            name="q3-continuous-dense-100m",
             solver=replace(
-                dense_settings.solver,
+                dense80.solver,
                 neighbor_radius_m=100.0,
             ),
         )
-        sensitivity = _reevaluate(
-            source=selected,
-            profile=sensitivity_settings,
+        cache = EvaluationCache()
+        evaluation80 = evaluate_design(
             mother=mother,
+            design=selected_design,
+            profile=dense80,
+            cache=cache,
+        )
+        evaluation100 = evaluate_design(
+            mother=mother,
+            design=selected_design,
+            profile=dense100,
             cache=cache,
         )
         written["dense_validation"] = write_dense_validation(
             output_dir=args.output,
-            evaluation=dense,
-            profile=dense_settings,
-            sensitivity_evaluations=(
-                (sensitivity_settings, sensitivity),
+            evaluations=(
+                (dense80, evaluation80),
+                (dense100, evaluation100),
             ),
         )
 
-    print("\n第三问结果" if not args.smoke else "\n第三问烟雾测试结果")
-    print(f"最终模型：{selected_name}")
-    print(f"镜子数：{selected.mirror_count}")
-    print(f"总镜面面积：{selected.total_area_m2:.3f} m²")
-    print(f"年平均输出热功率：{selected.annual_power_mw:.6f} MW")
+    print("\n五节点 Campo 连续模型结果", flush=True)
+    print(f"正式起点：{selected_start}", flush=True)
+    print(f"镜子数：{selected.mirror_count}", flush=True)
+    print(
+        f"总镜面面积：{selected.total_area_m2:.3f} m²",
+        flush=True,
+    )
+    print(
+        f"年平均输出热功率：{selected.annual_power_mw:.6f} MW",
+        flush=True,
+    )
     print(
         "单位镜面面积年平均输出："
-        f"{selected.unit_area_power_kw_m2:.6f} kW/m²"
+        f"{selected.unit_area_power_kw_m2:.6f} kW/m²",
+        flush=True,
     )
-    print(
-        "方位项诊断 RMSE 降幅："
-        f"{100.0 * radial.diagnostics.relative_rmse_reduction:.3f}%"
-    )
+    for outcome in search.starts:
+        print(
+            f"{outcome.start_name}："
+            f"{outcome.stopped_by}，"
+            f"联合循环 {outcome.joint_cycles}，"
+            f"稳定轮数 {outcome.stable_joint_cycles}",
+            flush=True,
+        )
     for path in written.values():
-        print(f"输出：{path}")
+        print(f"输出：{path}", flush=True)
     return 0
 
 

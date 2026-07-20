@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""独立入口；不修改原六组第三问实现。"""
+"""第三问五节点径向连续 Campo 模型入口。"""
 
 from heliostat.q3_continuous.solve import main
 

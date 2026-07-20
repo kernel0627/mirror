@@ -11,7 +11,7 @@ OUTPUT_PATH = (
     PROJECT_ROOT
     / "outputs"
     / "q3_continuous"
-    / "01_第三问Campo连续参数化完整代码.py"
+    / "01_完整代码.py"
 )
 SOURCE_PATHS = (
     "src/heliostat/config.py",
@@ -28,7 +28,6 @@ SOURCE_PATHS = (
     "src/heliostat/q3_continuous/model.py",
     "src/heliostat/q3_continuous/evaluate.py",
     "src/heliostat/q3_continuous/search.py",
-    "src/heliostat/q3_continuous/prune.py",
     "src/heliostat/q3_continuous/export.py",
     "src/heliostat/q3_continuous/solve.py",
 )
@@ -72,9 +71,8 @@ def _render_module(path: Path) -> str:
 
 def build_bundle(output_path: Path = OUTPUT_PATH) -> Path:
     sections = [
-        '"""第三问 Campo 连续参数化完整代码展示稿。\n\n'
-        "本文件与原六组第三问并列存在，合并共享光学核心、Campo 结构标签、"
-        "连续规格搜索、验证和输出流程。\n"
+        '"""第三问五节点径向连续 Campo 模型完整代码。\n\n'
+        "本文件合并光学核心、Campo 结构、连续规格搜索、验证和输出流程。\n"
         '"""',
         "from __future__ import annotations",
         "# ruff: noqa: E402,F401,F811",

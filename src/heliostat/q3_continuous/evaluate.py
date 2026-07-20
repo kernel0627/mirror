@@ -1,8 +1,9 @@
-"""独立第三问连续异构镜场评价、缓存和多级精度配置。"""
+"""五节点径向连续异构镜场的完整光学评价与精度配置。"""
 
 from __future__ import annotations
 
 import hashlib
+import threading
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -15,10 +16,10 @@ from ..q1.solve import SOLAR_TIMES, solve_question1
 from ..q2.evaluate import EvaluationProfile
 from .model import (
     CampoMotherField,
-    ContinuousDesign,
     ExpandedSpecifications,
     HeterogeneousGeometryCheck,
-    expand_continuous_design,
+    SplineDesign,
+    expand_spline_design,
     validate_heterogeneous_field,
 )
 
@@ -29,19 +30,14 @@ IntArray = NDArray[np.int64]
 
 @dataclass(frozen=True)
 class HeterogeneousEvaluation:
-    """一套逐镜规格与 Campo 结构标签的完整评价结果。"""
-
     profile_name: str
     coordinates: FloatArray
     widths: FloatArray
     heights: FloatArray
     installation_heights: FloatArray
     ring_indices: IntArray
+    ring_radii: FloatArray
     zone_indices: IntArray
-    zone_row_indices: IntArray
-    normalized_rows: FloatArray
-    azimuth_angles: FloatArray
-    azimuth_features: FloatArray
     nominal_ring_counts: IntArray
     actual_ring_counts: IntArray
     original_indices: IntArray
@@ -69,39 +65,30 @@ class HeterogeneousEvaluation:
 
 
 class EvaluationCache:
-    """按镜位、逐镜规格、塔位和数值精度缓存评价。"""
+    """线程安全的逐规格完整评价缓存。"""
 
     def __init__(self) -> None:
         self._values: dict[str, Question1Solution] = {}
+        self._lock = threading.Lock()
 
     def get(self, key: str) -> Question1Solution | None:
-        return self._values.get(key)
+        with self._lock:
+            return self._values.get(key)
 
     def put(self, key: str, value: Question1Solution) -> None:
-        self._values[key] = value
+        with self._lock:
+            self._values[key] = value
 
     def __len__(self) -> int:
-        return len(self._values)
-
-
-def coarse_profile() -> EvaluationProfile:
-    return EvaluationProfile(
-        name="q3-coarse",
-        solver=SolverConfig(
-            shadow_grid_size=5,
-            truncation_rays=64,
-            neighbor_radius_m=60.0,
-            truncation_chunk_size=128,
-            sobol_seed=2023,
-        ),
-        months=(3, 6, 9, 12),
-        solar_times=SOLAR_TIMES,
-    )
+        with self._lock:
+            return len(self._values)
 
 
 def medium_profile() -> EvaluationProfile:
+    """所有参数接受使用的 60 状态中精度。"""
+
     return EvaluationProfile(
-        name="q3-medium",
+        name="q3-continuous-medium",
         solver=SolverConfig(
             shadow_grid_size=10,
             truncation_rays=128,
@@ -114,7 +101,7 @@ def medium_profile() -> EvaluationProfile:
 
 def formal_profile() -> EvaluationProfile:
     return EvaluationProfile(
-        name="q3-formal",
+        name="q3-continuous-formal",
         solver=SolverConfig(
             shadow_grid_size=15,
             truncation_rays=256,
@@ -127,7 +114,7 @@ def formal_profile() -> EvaluationProfile:
 
 def dense_profile() -> EvaluationProfile:
     return EvaluationProfile(
-        name="q3-dense",
+        name="q3-continuous-dense",
         solver=SolverConfig(
             shadow_grid_size=20,
             truncation_rays=512,
@@ -140,7 +127,7 @@ def dense_profile() -> EvaluationProfile:
 
 def smoke_profile() -> EvaluationProfile:
     return EvaluationProfile(
-        name="q3-smoke",
+        name="q3-continuous-smoke",
         solver=SolverConfig(
             shadow_grid_size=2,
             truncation_rays=4,
@@ -191,64 +178,28 @@ def _cache_key(
 
 def evaluate_specifications(
     *,
-    coordinates: FloatArray,
+    mother: CampoMotherField,
     specifications: ExpandedSpecifications,
-    ring_indices: IntArray,
-    zone_indices: IntArray,
-    zone_row_indices: IntArray,
-    normalized_rows: FloatArray,
-    azimuth_angles: FloatArray,
-    azimuth_features: FloatArray,
-    nominal_ring_counts: IntArray,
-    actual_ring_counts: IntArray,
-    original_indices: IntArray,
-    field_config: FieldConfig,
     profile: EvaluationProfile,
-    safety_epsilon: float = 0.01,
     cache: EvaluationCache | None = None,
 ) -> HeterogeneousEvaluation:
-    xy = np.asarray(coordinates, dtype=float)
-    count = int(xy.shape[0])
-    structural = {
-        "ring_indices": np.asarray(ring_indices, dtype=np.int64),
-        "zone_indices": np.asarray(zone_indices, dtype=np.int64),
-        "zone_row_indices": np.asarray(
-            zone_row_indices,
-            dtype=np.int64,
-        ),
-        "normalized_rows": np.asarray(normalized_rows, dtype=float),
-        "azimuth_angles": np.asarray(azimuth_angles, dtype=float),
-        "azimuth_features": np.asarray(azimuth_features, dtype=float),
-        "nominal_ring_counts": np.asarray(
-            nominal_ring_counts,
-            dtype=np.int64,
-        ),
-        "actual_ring_counts": np.asarray(
-            actual_ring_counts,
-            dtype=np.int64,
-        ),
-        "original_indices": np.asarray(original_indices, dtype=np.int64),
-    }
-    for name, values in structural.items():
-        if values.ndim != 1 or values.shape[0] != count:
-            raise ValueError(f"{name} 长度与镜子数不一致。")
-
     geometry = validate_heterogeneous_field(
-        coordinates=xy,
+        coordinates=mother.coordinates,
         widths=specifications.widths,
         heights=specifications.heights,
         installation_heights=specifications.installation_heights,
-        tower_x=field_config.tower_x,
-        tower_y=field_config.tower_y,
-        field_radius=field_config.field_radius,
-        exclusion_radius=field_config.exclusion_radius,
-        safety_epsilon=safety_epsilon,
+        tower_x=mother.parameters.tower_x,
+        tower_y=mother.parameters.tower_y,
+        field_radius=mother.parameters.field_radius,
+        exclusion_radius=mother.parameters.exclusion_radius,
+        safety_epsilon=mother.parameters.safety_epsilon,
     )
     if not geometry.valid:
         raise ValueError(geometry.reason or "异构镜场几何约束不合法。")
 
+    field_config = field_config_from_mother(mother)
     key = _cache_key(
-        coordinates=xy,
+        coordinates=mother.coordinates,
         specifications=specifications,
         field_config=field_config,
         profile=profile,
@@ -256,7 +207,7 @@ def evaluate_specifications(
     solution = cache.get(key) if cache is not None else None
     if solution is None:
         prepared = prepare_field(
-            xy,
+            mother.coordinates,
             field_config,
             mirror_widths=specifications.widths,
             mirror_heights=specifications.heights,
@@ -273,38 +224,31 @@ def evaluate_specifications(
 
     return HeterogeneousEvaluation(
         profile_name=profile.name,
-        coordinates=xy,
+        coordinates=mother.coordinates,
         widths=specifications.widths,
         heights=specifications.heights,
         installation_heights=specifications.installation_heights,
+        ring_indices=mother.ring_indices,
+        ring_radii=mother.ring_radii,
+        zone_indices=mother.zone_indices,
+        nominal_ring_counts=mother.nominal_ring_counts,
+        actual_ring_counts=mother.actual_ring_counts,
+        original_indices=mother.original_indices,
         solution=solution,
         geometry=geometry,
-        **structural,
     )
 
 
 def evaluate_design(
     *,
     mother: CampoMotherField,
-    design: ContinuousDesign,
+    design: SplineDesign,
     profile: EvaluationProfile,
     cache: EvaluationCache | None = None,
 ) -> HeterogeneousEvaluation:
-    specifications = expand_continuous_design(mother, design)
     return evaluate_specifications(
-        coordinates=mother.coordinates,
-        specifications=specifications,
-        ring_indices=mother.ring_indices,
-        zone_indices=mother.zone_indices,
-        zone_row_indices=mother.zone_row_indices,
-        normalized_rows=mother.normalized_rows,
-        azimuth_angles=mother.azimuth_angles,
-        azimuth_features=mother.azimuth_features,
-        nominal_ring_counts=mother.nominal_ring_counts,
-        actual_ring_counts=mother.actual_ring_counts,
-        original_indices=mother.original_indices,
-        field_config=field_config_from_mother(mother),
+        mother=mother,
+        specifications=expand_spline_design(mother, design),
         profile=profile,
-        safety_epsilon=mother.parameters.safety_epsilon,
         cache=cache,
     )

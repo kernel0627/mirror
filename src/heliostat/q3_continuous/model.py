@@ -24,7 +24,6 @@ IntArray = NDArray[np.int64]
 
 CONTROL_NODE_COUNT = 5
 EXPECTED_RING_COUNT = 28
-EXPECTED_FULL_MIRROR_COUNT = 1471
 EXPECTED_Q2_MIRROR_COUNT = 1469
 
 
@@ -393,12 +392,6 @@ def build_campo_mother_field(
         ),
     )
     if require_recorded_structure:
-        if layout.mirror_count != EXPECTED_FULL_MIRROR_COUNT:
-            raise ValueError(
-                "完整 Campo 结构已变化："
-                f"期望 {EXPECTED_FULL_MIRROR_COUNT} 面，"
-                f"实际为 {layout.mirror_count} 面。"
-            )
         if mother.mirror_count != EXPECTED_Q2_MIRROR_COUNT:
             raise ValueError(
                 "问题二正式镜场已变化："
