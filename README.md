@@ -23,18 +23,35 @@
     └── q1/                        # 第一问的正式输出
 ```
 
+## 环境安装
+
+项目依赖统一记录在 `requirements.txt` 中。建议使用 Python 3.10 或更高版本，并在项目根目录创建虚拟环境：
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Windows PowerShell 激活虚拟环境：
+
+```powershell
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
 ## 第一问运行
 
 默认使用文档确定的正式精度：阴影网格 `15×15`、截断光线 `256`、邻镜半径 `60 m`。
 
 ```bash
-conda run -n agent python src/solve_q1.py
+python src/solve_q1.py
 ```
 
 快速调试一个时刻：
 
 ```bash
-conda run -n agent python src/solve_q1.py \
+python src/solve_q1.py \
   --months 6 \
   --times 12 \
   --limit-mirrors 20 \
@@ -46,7 +63,7 @@ conda run -n agent python src/solve_q1.py \
 运行基础检查：
 
 ```bash
-PYTHONPATH=src conda run -n agent python -m unittest discover -s tests -v
+PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
 正式结果见 `outputs/q1/`。`run_config.json` 会同时记录输入文件、1745 面镜子、题目参数和采样精度。
@@ -54,7 +71,7 @@ PYTHONPATH=src conda run -n agent python -m unittest discover -s tests -v
 ## 三维工具
 
 ```bash
-conda run -n agent python tool/heliostat3DApp.py
+python tool/heliostat3DApp.py
 ```
 
 该工具目前只计算余弦效率、大气透射率和反射率，显示的功率没有加入阴影遮挡和截断损失；论文和结果表应以 `src/solve_q1.py` 为准。
