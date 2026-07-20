@@ -11,7 +11,9 @@
 │   ├── WORK_BREAKDOWN.md         # 三问的工作边界和实现顺序
 │   └── questions/
 │       ├── 第一问.md             # 第一问正式建模与结果方案
+│       ├── 第一问公式说明.md     # 第一问完整公式总表与逐式定义
 │       ├── 第二问.md             # 第二问正式优化与结果方案
+│       ├── 第二问公式说明.md     # 第二问完整优化、布局与选择公式
 │       ├── q1-plan.md            # 第一问简版实施规格
 │       ├── q1-technical-notes.md # 第一问详细推导和数值说明
 │       ├── q1-validation.md      # 第一问当前结果与收敛检查
@@ -48,10 +50,12 @@
 ## 建模方案文档
 
 - `docs/questions/第一问.md`：第一问的固定镜场评价方案、正式结果、收敛验证以及与第二问的关系；
+- `docs/questions/第一问公式说明.md`：第一问从太阳位置、四项效率到月年汇总的完整公式系统；
 - `docs/questions/第二问.md`：正文版方案，明确同心圆简写、Campo 详写，并标注每张表和图片的数据来源；
+- `docs/questions/第二问公式说明.md`：第二问目标、约束、双布局生成、搜索、修剪和方案选择的完整公式系统；
 - `docs/questions/q2-technical-notes.md`：第二问的完整布局推导与搜索细节附件。
 
-两份文档是面向论文和交付的主方案；`q1-plan.md`、`q1-technical-notes.md` 和 `q1-validation.md` 保留为第一问的实施与推导附件。
+`第一问.md` 和 `第二问.md` 是面向论文和交付的正文方案；两份“公式说明”负责集中列全公式，`q1-plan.md`、`q1-technical-notes.md`、`q1-validation.md` 和 `q2-technical-notes.md` 保留为实施、推导、搜索与验证附件。
 
 ## 环境安装
 
