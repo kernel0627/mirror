@@ -1,10 +1,11 @@
-# Numerical solver and Excel input/output
+# Python >= 3.10
+# Q1/Q2 numerical solver, Excel delivery files, and paper figures
 numpy>=1.26
 scipy>=1.11
 openpyxl>=3.1
 matplotlib>=3.8
 
-# Optional interactive 3D viewer in tool/heliostat3DApp.py
+# Interactive 3D viewer in tool/heliostat3DApp.py
 PySide6>=6.7
 pyvista>=0.46
 pyvistaqt>=0.11

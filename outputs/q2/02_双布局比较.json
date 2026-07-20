@@ -1,0 +1,44 @@
+{
+  "partitioned": {
+    "parameters": {
+      "tower_y": -30.39400665089488,
+      "mirror_width": 6.810112316161394,
+      "mirror_height": 6.711419509376619,
+      "installation_height": 4.827990213849752,
+      "split_radius": 197.75490215979517,
+      "near_spacing": 16.236426647752523,
+      "far_spacing": 23.50087010129771,
+      "tower_x": 0.0,
+      "field_radius": 350.0,
+      "exclusion_radius": 100.0,
+      "safety_epsilon": 0.01
+    },
+    "ring_count": 14,
+    "mirror_count": 1446,
+    "total_area_m2": 66090.18287397186,
+    "annual_power_mw": 42.14678948737534,
+    "unit_area_power_kw_m2": 0.6377163393199492
+  },
+  "campo": {
+    "parameters": {
+      "tower_y": -181.8000539392233,
+      "mirror_width": 6.746757379733026,
+      "mirror_height": 6.228727007317101,
+      "installation_height": 4.110585252215359,
+      "first_ring_count": 72,
+      "initial_spacing": 11.860145900398493,
+      "spacing_growth": 0.17357327435165643,
+      "tower_x": 0.0,
+      "field_radius": 350.0,
+      "exclusion_radius": 100.0,
+      "safety_epsilon": 0.01
+    },
+    "ring_count": 28,
+    "mirror_count": 1469,
+    "total_area_m2": 61732.829847446854,
+    "annual_power_mw": 42.04423775741984,
+    "unit_area_power_kw_m2": 0.6810677213618567
+  },
+  "winner": "campo",
+  "comparison_note": "两种布局均采用 0.01 m 安全间距余量和问题一正式精度复算；campo 为继续细化、塔位复核和外层对称修剪后的最终方案。"
+}

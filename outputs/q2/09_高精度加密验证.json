@@ -1,0 +1,18 @@
+{
+  "profile": {
+    "months": 12,
+    "solar_times_per_month": 5,
+    "shadow_grid_size": 20,
+    "truncation_rays": 512,
+    "neighbor_radius_m": 80.0
+  },
+  "mirror_count": 1469,
+  "annual_power_constraint_mw": 42.0,
+  "annual_power_mw": 42.055114912132574,
+  "annual_power_margin_mw": 0.05511491213257358,
+  "unit_area_power_kw_m2": 0.6812439186095709,
+  "average_optical_efficiency": 0.7022373188114741,
+  "average_shadow_blocking_efficiency": 0.9678955638756526,
+  "average_truncation_efficiency": 0.9772083785384048,
+  "constraint_satisfied": true
+}

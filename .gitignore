@@ -18,6 +18,7 @@ htmlcov/
 
 # IDE and editor metadata
 .idea/
+.vscode/
 
 # Build and temporary files
 build/
@@ -29,3 +30,9 @@ tmp/
 # Excel lock/temp files
 .~*.xlsx
 ~$*.xlsx
+
+# Local exploration and non-delivery Q2 search checkpoints
+/Q2-2/
+/outputs/q2/stage*/
+/outputs/q2/final*/
+/outputs/q2/safety_margin*/
