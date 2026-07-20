@@ -1,0 +1,1928 @@
+{
+    "pdf_info": [
+        {
+            "para_blocks": [
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "基于XXX模型的XXX问题研究"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 0,
+                    "anchor": "_Toc18754",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "摘要"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 1,
+                    "anchor": "_Toc22414",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（1）标题一般写成："
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "基于XXX模型/方法/理论的XXX问题研究",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 2,
+                    "is_numbered_style": false,
+                    "level": 10
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（2）摘要一般包括三部分内容："
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "前言、正文和结尾",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 3
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（3）摘要是整个论文"
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "最重要的部分",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "，一定认真准备，不要超过一页"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 4
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（4）摘要内容概括：摘要前言主要起到总结概括的作用，一般交代一下背景和主要解决的问题即可，一般写3-5行。摘要正文主要写针对每一小问的建模过程和求解思路。摘要收尾是对整个建模过程的总结和升华，常见的是进行优缺点评价、模型的创新性评价、模型的推广等"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 5
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（5）关键词：一般写研究对象、主要模型或求解算法等，3-5个即可。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 6
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "总体内容形式："
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 7
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "开头段：本文针对XXX问题，主要建立了XXX模型，求解得到XXX结果。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 8
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "针对问题一，主要解决XXX问题，通过XXX分析，建立XXX模型，基于XXX方法/软件等，求解得到XXX结果。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 9
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "针对问题二，主要解决XXX问题，通过XXX分析，建立XXX模型，基于XXX方法/软件等，求解得到XXX结果。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 10
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "针对问题三，主要解决XXX问题，通过XXX分析，建立XXX模型，基于XXX方法/软件等，求解得到XXX结果。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 11
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "摘要收尾：是对整个建模过程的总结和升华，常见的是进行优缺点评价、模型的创新性评价、模型的推广等。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 12
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "关键词：XXX，XXX，XXX，XXX"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 13
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题重述"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 14,
+                    "anchor": "_Toc27344",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "在撰写论文时，首先要简单地说明问题的情景，即要说清事情的来龙去脉。列出必要数据，提出要解决的问题，并给出研究对象的关键信息的内容，它的目的在于使读者对要解决的问题有一个印象。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 15
+                },
+                {
+                    "type": "list",
+                    "attribute": "ordered",
+                    "ilevel": 0,
+                    "blocks": [
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "该部分主要是用自己的话对问题进行总结，"
+                                        },
+                                        {
+                                            "type": "text",
+                                            "content": "关键是改写！",
+                                            "style": [
+                                                "bold"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "一般问题重述的内容在"
+                                        },
+                                        {
+                                            "type": "text",
+                                            "content": "半页到一页左右",
+                                            "style": [
+                                                "bold"
+                                            ]
+                                        },
+                                        {
+                                            "type": "text",
+                                            "content": "即可。"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "虽然该部分不是重点，但确实查重最容易出问题的部分！"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "start": 1,
+                    "index": 16
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题分析"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 17,
+                    "anchor": "_Toc57576278",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题一的分析",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 18,
+                    "anchor": "_Toc32494",
+                    "is_numbered_style": true,
+                    "level": 2,
+                    "section_number": "1.1"
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "从实际问题到模型建立是一种从具体到抽象的思维过程，问题分析这一部分就是沟通这一过程的桥梁，因为它反映了建模者对于问题的认识程度如何，也体现了解决问题的雏形，"
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "起着承上启下的作用",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "，也很能反应出建模者的综合水平。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 19
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（1）这部分的内容应包括：题目中包含的信息和条件，利用信息和条件对题目做整体分析，确定用什么方法建立模型，一般是每个问题单独分析一小节，"
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "分析过程要简明扼要，不需要放结论",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 20
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（2）建议在文字说明的同时用图形或图表（"
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "例如流程图",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "）列出思维过程，这会使你的思维显得很清晰，让人觉得一目了然。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 21
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（注意：问题分析这一部分放置的位置比较灵活，可以放在问题重述后面作为单独的一节(见到的频率最高)，也可以放在模型假设和符号说明后面作为单独的一节，还可以针对每个问题将其写在模型建立中。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 22
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "本文的总体分析流程图如下:"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 23
+                },
+                {
+                    "type": "image",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "image",
+                                            "image_path": "https://cdn-mineru.openxlab.org.cn/result/2026-07-20/f1596f23-94ed-47a5-a6a8-f90614ec998d/5e383d1d45b7de4b9fa9143e4e9ea41713e055a9d72ac00614059c40393f341c.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 24,
+                            "type": "image_body"
+                        },
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "图1 问题的总分析"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 25,
+                            "type": "image_caption"
+                        }
+                    ],
+                    "index": 24
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题二的分析",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 26,
+                    "anchor": "_Toc13671",
+                    "is_numbered_style": true,
+                    "level": 2,
+                    "section_number": "1.2"
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题三的分析",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 27,
+                    "anchor": "_Toc57576280",
+                    "is_numbered_style": true,
+                    "level": 2,
+                    "section_number": "1.3"
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "模型假设"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 28,
+                    "anchor": "_Toc57576281",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "对情景的说明，不可能也不必要提供问题的每个细节。由此而来建立由此而来建立数学模型还是不够的，还要补充一些假设，模型假设是建立数学模型中非常关键的一步，关系到模型的成败和优劣。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 29
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "常见的假设如下："
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 30
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "① 对题目中已知条件或参数做出保真性假设",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 31,
+                    "is_numbered_style": false,
+                    "level": 10
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "如：题目给出的测量数据准确，无异常值；"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 32
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "② 仅考虑题目中涉及的主要条件，对其他情况不考虑或进行强制规定",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 33,
+                    "is_numbered_style": false,
+                    "level": 10
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "如：不考虑高压油管内壁对油的粘滞力;"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 34
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "③ 对题目中涉及的主要条件进行平稳性规定",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 35,
+                    "is_numbered_style": false,
+                    "level": 10
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "如：整个系统温度恒定"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 36
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "④ 为使研究更简便、或从常识性角度做出的假设",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 37,
+                    "is_numbered_style": false,
+                    "level": 10
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "如：以第四层(空气层)底层温度表示人体皮肤外侧温度"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 38
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "⑤ 对模型中相关参数做出规定",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 39,
+                    "is_numbered_style": false,
+                    "level": 10
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "如：人体为绝对黑体，即辐射发射率为1"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 40
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "符号说明"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 41,
+                    "anchor": "_Toc57576282",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "符号说明是对建模过程中涉及到的主要变量提前在论文中进行描述，以方便评审老师阅读论文"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 42
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（1）一般符号说明是以"
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "三线表",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "的形式给出，主要包括："
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "符号、含义和单位",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 43
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（2）只需要写主要的"
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "全局变量",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "即可，对于临时变量不需要写"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 44
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（3）建议大家用"
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "希腊字母",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                },
+                                {
+                                    "type": "text",
+                                    "content": "，尽量不要用中文字符或英文字母"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 45
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（4）即使在符号说明里进行了解释，也需要在下文中该符号首次出现时说明"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 46
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "表1 本文的符号说明"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 47
+                },
+                {
+                    "type": "table",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "table",
+                                            "html": "<table><tr><td><p><strong>符号</strong></p></td><td><p><strong>说明</strong></p></td><td><p><strong>单位</strong></p></td></tr><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td><p>/</p></td></tr><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr></table>"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 48,
+                            "type": "table_body"
+                        }
+                    ],
+                    "index": 48
+                },
+                {
+                    "type": "image",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "image",
+                                            "image_path": "https://cdn-mineru.openxlab.org.cn/result/2026-07-20/f1596f23-94ed-47a5-a6a8-f90614ec998d/54774efdd17e5249b3faf16561f7cbb070600e1b9f43aa6ed3c3b9c6899efed8.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 49,
+                            "type": "image_body"
+                        }
+                    ],
+                    "index": 49
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "模型建立与求解"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 50,
+                    "anchor": "_Toc57576283",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "数学模型建立是最为重要的一环，既然是建模比赛，所以建立数学模型是最重要的。当然，有些问题的求解过程难用数学语言表述，也应该对解决问题的方案作明确的阐述评审中，数学模型占绝对地位，如果论文中没有数学模型，会大大的影响对论文的评价。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 51
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（1）模型要基本正确，简明，便于求解",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 52
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（2）建立模型要有根据，能详细阐述建模的逻辑",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 53
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（3）模型要实用有效，以能有效解决问题为原则",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 54
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（4）模型要具有可解性，建立的模型需要考虑到下一步的求解",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 55
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "（5）模型不要追求数学上的难度，不要超出本科数学的知识",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 56
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题一模型的建立与求解",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 57,
+                    "anchor": "_Toc5559",
+                    "is_numbered_style": true,
+                    "level": 2,
+                    "section_number": "1.4"
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "数据预处理"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 58,
+                    "anchor": "_Toc12522",
+                    "is_numbered_style": true,
+                    "level": 3,
+                    "section_number": "1.4.1"
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "XXX模型的建立"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 59,
+                    "anchor": "_Toc30769",
+                    "is_numbered_style": true,
+                    "level": 3,
+                    "section_number": "1.4.2"
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "XXX模型的求解"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 60,
+                    "anchor": "_Toc31148",
+                    "is_numbered_style": true,
+                    "level": 3,
+                    "section_number": "1.4.3"
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "XXX结果的分析"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 61,
+                    "anchor": "_Toc18808",
+                    "is_numbered_style": true,
+                    "level": 3,
+                    "section_number": "1.4.4"
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题二模型的建立与求解",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 62,
+                    "anchor": "_Toc3788",
+                    "is_numbered_style": true,
+                    "level": 2,
+                    "section_number": "1.5"
+                },
+                {
+                    "type": "table",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "table",
+                                            "html": "<table><tr><td><p>这里插入公式，务必用公式编辑器，不要截图！</p></td><td><p>()</p></td></tr></table>"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 63,
+                            "type": "table_body"
+                        }
+                    ],
+                    "index": 63
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "问题三模型的建立与求解",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 64,
+                    "anchor": "_Toc19545",
+                    "is_numbered_style": true,
+                    "level": 2,
+                    "section_number": "1.6"
+                },
+                {
+                    "type": "table",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "table",
+                                            "html": "<table><tr><td><p>这里插入公式</p></td><td><p>(2)</p></td></tr></table>"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 65,
+                            "type": "table_body"
+                        }
+                    ],
+                    "index": 65
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "模型检验"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 66,
+                    "anchor": "_Toc10243",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "模型检验就是对所建立的模型就其可行性、准确性和实用性等进行检验，一般根据问题的要求和模型特点主要包括下列几种："
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 67
+                },
+                {
+                    "type": "list",
+                    "attribute": "unordered",
+                    "ilevel": 0,
+                    "blocks": [
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "稳定性与敏感性分析"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "统计检验与误差分析"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "新旧模型的对比"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 68
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "模型优缺点评价"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 69,
+                    "anchor": "_Toc24900",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "所谓的模型优缺点评价往往并不局限于模型本身，在整个建模过程中所表露 出的优缺点均可在最后进行陈述，一般撰写模型优缺点的基本原则是优点说 充分，缺点不回避；"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 70
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "7.1 模型的优点",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 71,
+                    "anchor": "_Toc30007",
+                    "is_numbered_style": false,
+                    "level": 2
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "常见的优点表述形式"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 72
+                },
+                {
+                    "type": "list",
+                    "attribute": "unordered",
+                    "ilevel": 0,
+                    "blocks": [
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "模型或思路设计的简洁实用，效率高"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "本文建立的模型具有很强的创新性"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "模型的计算结果准确，精度高"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "模型考虑的系统全面，有很强的实用性"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "对模型进行了各类检验、稳定性高"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "模型本身具有的优点"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 73
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "7.2 模型的缺点",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 74,
+                    "anchor": "_Toc19695",
+                    "is_numbered_style": false,
+                    "level": 2
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "常见的缺点表述形式"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 75
+                },
+                {
+                    "type": "list",
+                    "attribute": "unordered",
+                    "ilevel": 0,
+                    "blocks": [
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "受XX因素限制，未考虑XX情况，影响精度"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "本文考虑的因素较为理想，降低了模型的普适性和推广能力"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "由于系统考虑了XXX等因素，导致模型较为复杂，计算时间长，效率低"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "模型本身具有的缺点"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 76
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "7.3 模型的改进",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 77,
+                    "anchor": "_Toc21249",
+                    "is_numbered_style": false,
+                    "level": 2
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "模型的改进一般是针对模型的缺点而言的，主要是提出一些改进的思路即可。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 78
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "参考文献"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 79,
+                    "anchor": "_Toc326",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "对于常见的各类参考文献标注方法如下："
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 80
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "1）著作：作者姓名，题名[M].出版地：出版社，出版年."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 81
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "2）期刊论文：作者姓名．题名[J].期刊名称，年，卷(期)：页码."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 82
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "3）会议论文集：作者姓名．题名[C]//论文集名称，会议地点，会议日期."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 83
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "4）学位论文：作者姓名．题名[D].出版地：出版者，出版年."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 84
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "5）专利文献：专利申请者或所有者姓名．专利题名：专利国别，专利号[P].公告日期或公开日期．获取路径."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 85
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "6）电子文献：作者姓名．题名[文献类型标志(含文献载体标志)见其它]．出版地：出版者，出版年(更新或修改日期)，获取路径."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 86
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "7）报告：作者姓名．题名[R].出版地：出版者，出版年."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 87
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "8）标准：标准号．题名[S].出版地：出版者，出版年."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 88
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "注意使用 AI 工具生成的内容，应在正文相应位置进行标注；在参考文 献中列出所用 AI 工具，格式如下： [编号] 工具名称，版本/型号，开 发机构/公司，使用日期。（示例：[1] DeepSeek, DeepSeek-R1-0528, 深 度求索（DeepSeek）, 2025-09-05）",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 89
+                },
+                {
+                    "type": "image",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "image",
+                                            "image_path": "https://cdn-mineru.openxlab.org.cn/result/2026-07-20/f1596f23-94ed-47a5-a6a8-f90614ec998d/b656a781fb4cb7c95485c9fb938f96bfe6533df95f5142ede1d48a9cc80f7bff.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 90,
+                            "type": "image_body"
+                        }
+                    ],
+                    "index": 90
+                },
+                {
+                    "type": "title",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "附录",
+                                    "style": [
+                                        "bold"
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 91,
+                    "anchor": "_Toc15480",
+                    "is_numbered_style": false,
+                    "level": 1
+                },
+                {
+                    "type": "table",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "table",
+                                            "html": "<table><tr><td><p>附录1</p></td></tr><tr><td><p>介绍：支撑材料的文件列表</p></td></tr><tr><td></td></tr></table>"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 92,
+                            "type": "table_body"
+                        }
+                    ],
+                    "index": 92
+                },
+                {
+                    "type": "table",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "table",
+                                            "html": "<table><tr><td><p>附录2</p></td></tr><tr><td><p>介绍：该代码是某某语言编写的，作用是什么 </p></td></tr><tr><td></td></tr></table>"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 93,
+                            "type": "table_body"
+                        }
+                    ],
+                    "index": 93
+                },
+                {
+                    "type": "table",
+                    "blocks": [
+                        {
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "table",
+                                            "html": "<table><tr><td><p>附录3</p></td></tr><tr><td><p>介绍：该代码是某某语言编写的，作用是什么</p></td></tr><tr><td></td></tr></table>"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 94,
+                            "type": "table_body"
+                        }
+                    ],
+                    "index": 94
+                },
+                {
+                    "type": "text",
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "text",
+                                    "content": "除了支撑材料的文件列表和源程序代码外，附录中还可以包括下面内容："
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 95
+                },
+                {
+                    "type": "list",
+                    "attribute": "unordered",
+                    "ilevel": 0,
+                    "blocks": [
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "某一问题的详细证明或求解过程；"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "自己在网上找到的数据；"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "比较大的流程图；"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "type": "text",
+                                            "content": "较繁杂的图表或计算结果"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 96
+                }
+            ],
+            "discarded_blocks": [],
+            "page_idx": 0
+        }
+    ],
+    "_backend": "office",
+    "_version_name": "3.4.3"
+}

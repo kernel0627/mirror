@@ -1,0 +1,53 @@
+{
+  "source": "/Users/traegang/Code/cowork/task/A/fj.xlsx",
+  "field": {
+    "latitude_deg": 39.4,
+    "altitude_km": 3.0,
+    "tower_x": 0.0,
+    "tower_y": 0.0,
+    "receiver_center_z": 86.0,
+    "receiver_radius": 4.0,
+    "receiver_height": 8.0,
+    "mirror_width": 6.2,
+    "mirror_height": 6.2,
+    "mirror_center_z": 4.5,
+    "reflectivity": 0.92,
+    "solar_angular_radius_rad": 0.00465
+  },
+  "solver": {
+    "shadow_grid_size": 15,
+    "truncation_rays": 256,
+    "neighbor_radius_m": 60.0,
+    "candidate_margin": 1.05,
+    "ray_epsilon": 1e-07,
+    "truncation_chunk_size": 128,
+    "sobol_seed": 2023,
+    "calculate_shadow": true,
+    "calculate_truncation": true
+  },
+  "run": {
+    "mirror_count": 1745,
+    "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "solar_times": [
+      9.0,
+      10.5,
+      12.0,
+      13.5,
+      15.0
+    ],
+    "time_state_count": 60
+  }
+}
