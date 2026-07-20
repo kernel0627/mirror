@@ -1,8 +1,10 @@
 {
-  "source": "/Users/traegang/Code/cowork/task/A/fj.xlsx",
+  "source": "task/A/fj.xlsx",
   "field": {
     "latitude_deg": 39.4,
     "altitude_km": 3.0,
+    "field_radius": 350.0,
+    "exclusion_radius": 100.0,
     "tower_x": 0.0,
     "tower_y": 0.0,
     "receiver_center_z": 86.0,

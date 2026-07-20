@@ -1,18 +1,13 @@
-"""坐标输入与结果文件输出。"""
+"""三问共用的坐标输入。"""
 
 from __future__ import annotations
 
 import csv
-import json
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Iterable, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 from openpyxl import load_workbook
-
-from .config import FieldConfig, SolverConfig
 
 
 FloatArray = NDArray[np.float64]
@@ -53,72 +48,3 @@ def load_mirror_xy(path: str | Path, expected_count: int | None = 1745) -> Float
             f"应读取 {expected_count} 面定日镜，实际读取 {mirror_xy.shape[0]} 面。"
         )
     return mirror_xy
-
-
-def _write_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
-    if not rows:
-        raise ValueError(f"没有可写入 {path.name} 的结果。")
-    with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def write_question1_results(
-    output_dir: str | Path,
-    time_records: Iterable[Any],
-    monthly_records: Iterable[Any],
-    annual_record: Any,
-    field_config: FieldConfig,
-    solver_config: SolverConfig,
-    source_path: str | Path,
-    mirror_count: int,
-) -> dict[str, Path]:
-    """将 60 时刻、月均、年均和运行参数写入可审计文件。"""
-
-    destination = Path(output_dir)
-    destination.mkdir(parents=True, exist_ok=True)
-
-    time_rows = [asdict(record) for record in time_records]
-    monthly_rows = [asdict(record) for record in monthly_records]
-    annual_row = asdict(annual_record)
-    months = sorted({row["month"] for row in time_rows})
-    solar_times = sorted({row["solar_time"] for row in time_rows})
-
-    time_path = destination / "time_results.csv"
-    monthly_path = destination / "monthly_results.csv"
-    annual_path = destination / "annual_results.json"
-    run_path = destination / "run_config.json"
-
-    _write_csv(time_path, time_rows)
-    _write_csv(monthly_path, monthly_rows)
-    annual_path.write_text(
-        json.dumps(annual_row, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    run_path.write_text(
-        json.dumps(
-            {
-                "source": str(Path(source_path).resolve()),
-                "field": field_config.to_dict(),
-                "solver": solver_config.to_dict(),
-                "run": {
-                    "mirror_count": mirror_count,
-                    "months": months,
-                    "solar_times": solar_times,
-                    "time_state_count": len(time_rows),
-                },
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    return {
-        "time": time_path,
-        "monthly": monthly_path,
-        "annual": annual_path,
-        "config": run_path,
-    }

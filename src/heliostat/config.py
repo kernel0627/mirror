@@ -11,6 +11,8 @@ class FieldConfig:
 
     latitude_deg: float = 39.4
     altitude_km: float = 3.0
+    field_radius: float = 350.0
+    exclusion_radius: float = 100.0
     tower_x: float = 0.0
     tower_y: float = 0.0
     receiver_center_z: float = 86.0

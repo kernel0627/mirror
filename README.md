@@ -14,8 +14,17 @@
 │       ├── q1-technical-notes.md # 第一问详细推导和数值说明
 │       └── q1-validation.md      # 第一问当前结果与收敛检查
 ├── src/
-│   ├── heliostat/                # 可供三问复用的光学计算核心
-│   └── solve_q1.py               # 第一问命令行入口
+│   ├── heliostat/
+│   │   ├── solar.py              # 三问共用：太阳位置和 DNI
+│   │   ├── geometry.py           # 三问共用：镜场几何与姿态
+│   │   ├── shadow.py             # 三问共用：阴影遮挡
+│   │   ├── truncation.py         # 三问共用：截断效率
+│   │   └── q1/                   # 第一问专用流程
+│   │       ├── solve.py          # 逐时刻计算与命令行
+│   │       ├── aggregate.py      # 月平均、年平均
+│   │       ├── export.py         # 结果和论文表格输出
+│   │       └── plot.py           # 两张正式结果图
+│   └── solve_q1.py               # 兼容命令行入口
 ├── tool/
 │   └── heliostat3DApp.py         # 交互式三维展示，不作为正式结果
 ├── tests/                         # 几何和物理不变量检查
@@ -66,7 +75,15 @@ python src/solve_q1.py \
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-正式结果见 `outputs/q1/`。`run_config.json` 会同时记录输入文件、1745 面镜子、题目参数和采样精度。
+正式结果见 `outputs/q1/`。该目录是可直接分享的扁平展示包，按编号依次包含单文件完整代码、逐时刻/月平均/年平均结果、1745 面镜子的年平均结果、运行配置、论文表格和两张正式结果图。
+
+两张图分别展示月平均综合光学效率与单位面积输出热功率，以及单镜年平均综合光学效率的空间分布。运行收敛验证：
+
+```bash
+python src/solve_q1.py --run-validation
+```
+
+程序只保留逐时刻的全场汇总和单镜年平均结果，不保存全部单镜逐时刻数据。工程内部仍按职责拆分在 `src/heliostat/q1/`，展示包则合并为一个 `01_第一问完整代码.py`。
 
 ## 三维工具
 
