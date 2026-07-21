@@ -2,10 +2,10 @@
 
 本项目对应 `task/A题.pdf` 的三问。题面和原始附件、正式源码、辅助工具、说明文档和计算输出彼此分开，避免把演示程序当成正式求解器。
 
-> 第三问当前状态：原六组方案及正式结果完整保留；新的五节点径向连续
-> Campo 模型已经完成代码重构和端到端烟雾测试，但三起点中精度收敛、
-> 正式复算和加密验证按要求中止，尚未形成新的正式结论。现有
-> `outputs/q3_continuous/` 中的旧两区直线结果不得作为五节点模型结果引用。
+> 第三问当前状态：原六组方案及正式结果完整保留，作为最终数值 baseline；
+> 新的径向—角度连续 Campo2D 模型已完成代码、8 项专项测试和端到端 smoke
+> 验证，但尚未执行多起点正式搜索、正式复算和加密验证。smoke 的单时刻
+> 数值以及 `outputs/q3_continuous/` 中的历史结果均不得作为新模型结论引用。
 
 ## 目录
 
@@ -23,10 +23,11 @@
 │       ├── q1-technical-notes.md # 第一问详细推导和数值说明
 │       ├── q1-validation.md      # 第一问当前结果与收敛检查
 │       ├── q2-technical-notes.md # 第二问完整推导与搜索细节
-│       ├── 第三问.md             # 原六组第三问正文（连续模型正文待收口）
-│       ├── 第三问公式说明.md     # 原六组第三问公式说明
-│       ├── q3-technical-notes.md # 第三问实现接口、搜索与验证细节
-│       └── q3_continuous/        # Campo 连续模型旧文档，待按五节点实跑结果重写
+│       ├── 第三问.md             # 新 Campo2D 第三问正文
+│       ├── 第三问公式说明.md     # 新 Campo2D 完整公式系统
+│       ├── q3-technical-notes.md # 原六组实现接口与验证细节
+│       ├── q3_continuous/        # 旧五节点纯径向连续模型文档
+│       └── q3_campo2d/           # 新模型运行与实现说明
 ├── src/
 │   ├── heliostat/
 │   │   ├── solar.py              # 三问共用：太阳位置和 DNI
@@ -53,11 +54,13 @@
 │   │   │   ├── prune.py          # 低贡献对称镜位结构化删镜
 │   │   │   ├── export.py         # 第三问结果和 result3.xlsx
 │   │   │   └── solve.py          # 第三问命令行流程
-│   │   └── q3_continuous/        # 五节点径向连续 Campo 实现
+│   │   ├── q3_continuous/        # 旧五节点纯径向连续 Campo 实现
+│   │   └── q3_campo2d/           # 新径向—角度连续 Campo 实现
 │   ├── solve_q1.py               # 兼容命令行入口
 │   ├── solve_q2.py               # 第二问兼容命令行入口
 │   ├── solve_q3.py               # 原六组第三问入口
-│   └── solve_q3_continuous.py    # Campo 连续参数化独立入口
+│   ├── solve_q3_continuous.py    # 旧纯径向连续模型入口
+│   └── solve_q3_campo2d.py       # 新 Campo2D 正式入口
 ├── tool/
 │   └── heliostat3DApp.py         # 交互式三维展示，不作为正式结果
 ├── tests/                         # 几何和物理不变量检查
@@ -67,7 +70,8 @@
     ├── q1/                        # 第一问扁平交付包
     ├── q2/                        # 第二问扁平交付包
     ├── q3/                        # 原六组第三问正式输出
-    └── q3_continuous/            # Campo 连续输出；正式重跑前仍是旧模型结果
+    ├── q3_continuous/             # 历史连续模型结果，不作为新结论
+    └── q3_campo2d/                # 新模型正式运行后生成
 ```
 
 ## 建模方案文档
@@ -77,14 +81,13 @@
 - `docs/questions/第二问.md`：正文版方案，明确同心圆简写、Campo 详写，并标注每张表和图片的数据来源；
 - `docs/questions/第二问公式说明.md`：第二问目标、约束、双布局生成、搜索、修剪和方案选择的完整公式系统；
 - `docs/questions/q2-technical-notes.md`：第二问的完整布局推导与搜索细节附件。
-- `docs/questions/第三问.md`：固定问题二 Campo 几何结构下的六组异构规格优化正文方案；
-- `docs/questions/第三问公式说明.md`：逐镜宽、高、安装高度、面积加权、经验校准和删镜公式；
-- `docs/questions/q3-technical-notes.md`：异构核心接口、六组映射、搜索动作和验证流程。
-- `docs/questions/q3_continuous/`：Campo 连续实验的独立说明目录；其中旧的
-  区域—行号、方位角和单调放松内容已不再对应当前五节点实现，需在正式
-  实验完成后按实际结果重写。
+- `docs/questions/第三问.md`：塔位和 Campo 几何微调下的径向—角度连续异构优化正文；
+- `docs/questions/第三问公式说明.md`：新模型的 Campo 重建、连续规格、异构评价、约束与搜索公式；
+- `docs/questions/q3_campo2d/技术说明.md`：新实现的独立边界、文件职责、运行命令和结果状态；
+- `docs/questions/q3-technical-notes.md`：原六组方案的实现接口和验证细节；
+- `docs/questions/q3_continuous/`：旧五节点纯径向连续实验的历史说明。
 
-三份中文题目文档是面向论文和交付的正文方案；对应“公式说明”负责集中列全公式，`q1-plan.md`、`q1-technical-notes.md`、`q1-validation.md`、`q2-technical-notes.md` 和 `q3-technical-notes.md` 保留为实施、推导、搜索与验证附件。
+三份中文题目文档是面向论文和交付的正文方案；对应“公式说明”负责集中列全公式，其他技术说明保留为实施、推导、搜索与验证附件。
 
 ## 环境安装
 
@@ -175,153 +178,77 @@ python outputs/q2/01_第二问完整代码.py --help
 
 ## 第三问运行
 
-第三问固定问题二最终 Campo 塔位和镜心平面坐标，恢复最后删除的对称镜位，
-构造 1471 面完整母场，再对六个径向结构组联合优化镜面尺度和安装高度。
+### 当前主线：径向—角度连续 Campo2D
 
-先运行一个规定时刻的端到端烟雾测试：
+第三问以问题二的 1469 面改进 Campo 镜场为中心初值，同时优化塔的南北
+坐标、初始径向行距、行距增长量、外层圆环前缀、五节点径向尺寸与高度、
+同环中心化角度修正以及全局面积尺度。几何变量变化后会重新生成 Campo，
+不会把原镜位固定后只移动塔。
+
+Sobol 序列只负责产生分散初值；局部优化采用整批 best-improvement：先用
+粗精度统一排序候选，再把前若干个候选送入中精度复算。候选只有在中精度
+满足 $\overline P\ge42\ \mathrm{MW}$ 且单位面积输出 $q$ 改善时才会被接受。
+
+先运行 8 项专项检查：
 
 ```bash
-python src/solve_q3.py \
+conda run -n agent env PYTHONPATH=src \
+python -m unittest discover -s tests -p 'test_q3_campo2d.py' -v
+```
+
+端到端 smoke 使用一个规定时刻和最小搜索预算：
+
+```bash
+conda run -n agent env MPLCONFIGDIR=/tmp/codex-matplotlib PYTHONPATH=src \
+python src/solve_q3_campo2d.py \
   --smoke \
-  --calibration-candidates 1 \
-  --max-cycles 1 \
-  --prune-rounds 0 \
-  --output /tmp/q3-smoke
+  --sobol-count 1 \
+  --retained-starts 2 \
+  --max-rounds 1 \
+  --max-joint-cycles 1 \
+  --medium-candidates 1 \
+  --output /tmp/q3-campo2d-smoke
 ```
 
-烟雾测试验证异构评价、搜索和 `result3.xlsx` 输出链路，不能作为正式结果。
-正式搜索使用：
+smoke 只验证动态 Campo 重建、Sobol 起点、分块搜索、异构评价、Excel 和
+图片输出链路。它只有六月正午一个状态，任何功率、面积或 $q$ 数值都不是
+正式年平均结果。
+
+正式多起点搜索使用：
 
 ```bash
-python src/solve_q3.py
+conda run -n agent env MPLCONFIGDIR=/tmp/codex-matplotlib PYTHONPATH=src \
+python src/solve_q3_campo2d.py
 ```
 
-增加 `--run-validation` 后，会对最终正式候选执行 `20×20` 阴影网格、
-512 条截断光线以及 80 m、100 m 邻镜半径的加密与敏感性复算。第三问
-正式运行需要多次评价完整 1471 面镜场，计算量高于单次问题二复算。
-
-当前正式方案保留 1471 面镜子，总镜面面积为 `60777.391 m²`，正式精度
-年平均输出为 `42.051608 MW`，单位面积输出为 `0.691896 kW/m²`；
-相对问题二最终方案提高约 `1.590%`。80 m 加密复算为
-`42.031084 MW`，扩大到 100 m 邻域后结果不变。正式交付文件见
-`outputs/q3/`。
-
-## 第三问 Campo 连续参数化独立实验
-
-原六组第三问继续保留在 `src/heliostat/q3/`、
-`docs/questions/第三问*.md` 和 `outputs/q3/`；额外快照位于
-`backups/q3-six-group-20260721/`。
-
-### 当前模型
-
-连续方案固定问题二正式的 1469 面 Campo 镜位、塔位和布局参数，只优化
-每面镜子的尺寸与安装高度。不恢复额外镜位，不删镜，不调整塔位、行距或
-镜心坐标，也不使用方位角项和单调约束。
-
-程序根据 Campo 圆环、区域切换和场地裁剪元数据自动选择五个径向控制节点。
-当前固定问题二数据得到的控制环为第 1、4、12、14、28 环，对应控制半径约为
-`134.765 m`、`170.866 m`、`274.773 m`、`302.486 m`、`515.913 m`。
-五个分段线性基函数满足
-
-$$
-B_j(r_i)\ge 0,
-\qquad
-\sum_{j=1}^{5}B_j(r_i)=1.
-$$
-
-尺寸形状和安装高度定义为
-
-$$
-g_i=\sum_{j=1}^{5}\alpha_jB_j(r_i),
-\qquad
-\widetilde g_i=g_i-\frac{1}{N}\sum_{k=1}^{N}g_k,
-$$
-
-$$
-s_i=\lambda\exp(\widetilde g_i),
-\qquad
-w_i=s_iw_0,
-\qquad
-h_i=s_ih_0,
-$$
-
-$$
-H_i=\sum_{j=1}^{5}\beta_jB_j(r_i).
-$$
-
-模型包含五个尺寸节点、五个高度节点和一个全局面积系数。尺寸中心化消除
-一个冗余自由度，因此共有 11 个参数、约 10 个有效自由度。
-
-### 搜索与精度
-
-三个初值分别为统一规格、旧连续结果的五节点投影和弱工程先验。每个初值
-依次执行：
-
-1. 高度节点搜索，步长为 `0.4、0.2、0.1、0.05 m`；
-2. 固定 $\lambda=1$ 的尺寸形状搜索，步长为 `0.04、0.02、0.01、0.005`；
-3. $\lambda$ 的 `0.005、0.001、0.0002` 三级网格搜索；
-4. 尺寸、高度和 $\lambda$ 联合回扫，连续两轮中精度改善小于
-   $10^{-5}$ 时停止，最多运行 8 轮。
-
-所有参数接受均使用完整 60 个规定状态、`10×10` 阴影网格和 128 条截断
-光线，并在满足 $\overline P\ge42\ \mathrm{MW}$ 的候选中严格选择 $q$
-更高者。三个收敛解使用 `15×15`/256/60 m 正式复算；只对正式最优解执行
-`20×20`/512、80 m 和 100 m 加密验证。
-
-快速端到端烟雾测试：
+正式命令默认生成 16 个 Sobol 起点、保留 3 个起点，完成中精度收敛、三个
+候选的正式复算以及最终解的 80 m、100 m 加密验证。正式运行成功后生成
+单文件展示稿：
 
 ```bash
-conda run -n agent env PYTHONPATH=src \
-python src/solve_q3_continuous.py \
-  --smoke \
-  --max-joint-cycles 2 \
-  --output /tmp/q3-continuous-smoke
+conda run -n agent python tool/build_q3_campo2d_bundle.py
 ```
 
-烟雾测试只验证五节点展开、三起点搜索、几何约束和结果导出链路，其单时刻
-数值不能作为年平均结果。
+正式输出目录为 `outputs/q3_campo2d/`，按 01–20 编号保存完整代码、初值、
+搜索轨迹、逐镜结果、逐时刻/月/年结果、逐环与角度统计、baseline 比较、
+几何与加密验证、`result3.xlsx`、论文表格以及四张正式图片。
 
-正式独立运行：
+当前新模型的代码、8 项专项测试和一次最小 smoke 已通过；正式搜索尚未运行，
+因此还不能判断它是否优于六组方案。完整方案见
+`docs/questions/第三问.md`，公式见 `docs/questions/第三问公式说明.md`。
 
-```bash
-conda run -n agent env PYTHONPATH=src \
-python src/solve_q3_continuous.py
-```
+### 六组正式 baseline 与历史连续模型
 
-正式命令会自动完成三起点中精度搜索、三个收敛解的正式复算，以及正式最优
-解的两档加密验证。运行成功后再生成单文件完整代码：
+原六组源码、测试和正式输出仍完整保留在 `src/heliostat/q3/`、
+`tests/test_q3.py` 和 `outputs/q3/`，额外快照位于
+`backups/q3-six-group-20260721/`。六组正式结果为 1471 面镜子、
+总镜面面积 `60777.391 m²`、年平均输出 `42.051608 MW`、单位面积输出
+`0.691896 kW/m²`；它只用于新模型完成后的统一精度比较，不用于新模型
+初值或候选接受。
 
-```bash
-conda run -n agent python tool/build_q3_continuous_bundle.py
-```
-
-目标输出为：
-
-```text
-outputs/q3_continuous/
-├── 01_完整代码.py
-├── 02_逐镜最终参数.csv
-├── 03_逐时刻结果.csv
-├── 04_月平均结果.csv
-├── 05_年平均结果.json
-├── 06_搜索轨迹.csv
-├── 07_最终方案摘要.json
-├── 08_正式精度验证.json
-├── 09_加密精度验证.json
-└── 10_连续规格节点.csv
-```
-
-只运行 Campo 专项检查：
-
-```bash
-conda run -n agent env PYTHONPATH=src \
-python -m unittest discover -s tests -p 'test_q3_continuous.py' -v
-```
-
-当前 8 项专项检查已通过，三起点正式实验则在运行过程中按要求中止，因此
-尚无五节点模型的正式年平均结果，也不能据此判断其最终效果是否优于六组
-方案。旧的 `0.687936 kW/m²` 来自已废弃的两区直线连续模型，不是本模型
-最终结果。
+`src/heliostat/q3_continuous/`、`src/solve_q3_continuous.py`、
+`docs/questions/q3_continuous/` 和 `outputs/q3_continuous/` 属于旧五节点纯
+径向连续实验。旧的 `0.687936 kW/m²` 不代表 Campo2D 新模型结果。
 
 ## 三维工具
 
