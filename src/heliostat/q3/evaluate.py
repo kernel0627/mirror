@@ -127,12 +127,40 @@ def evaluate_design(
     profile: EvaluationProfile,
     cache: EvaluationCache | None = None,
 ) -> RefineEvaluation:
-    field, specifications, check = prepare_candidate(
+    field = build_refine_field(baseline, design)
+    return evaluate_field(
         baseline=baseline,
         design=design,
+        field=field,
+        profile=profile,
+        cache=cache,
+    )
+
+
+def evaluate_field(
+    *,
+    baseline: RefineBaseline,
+    design: RefineDesign,
+    field: RefineField,
+    profile: EvaluationProfile,
+    cache: EvaluationCache | None = None,
+) -> RefineEvaluation:
+    """评价固定镜位及显式分区归属，用于边界局部检验。"""
+
+    specifications = expand_specifications(field, design)
+    check = validate_heterogeneous_field(
+        coordinates=field.coordinates,
+        widths=specifications.widths,
+        heights=specifications.heights,
+        installation_heights=specifications.installation_heights,
+        tower_x=baseline.parameters.tower_x,
+        tower_y=design.tower_y,
+        field_radius=baseline.parameters.field_radius,
+        exclusion_radius=baseline.parameters.exclusion_radius,
+        safety_epsilon=baseline.parameters.safety_epsilon,
     )
     if not check.valid:
-        raise ValueError(check.reason or "六区微调候选几何不合法。")
+        raise ValueError(check.reason or "六区候选几何不合法。")
     raw = _evaluate_specifications(
         coordinates=field.coordinates,
         specifications=specifications,
@@ -176,6 +204,7 @@ __all__ = (
     "coarse_profile",
     "dense_profile",
     "evaluate_design",
+    "evaluate_field",
     "formal_profile",
     "medium_profile",
     "metrics",

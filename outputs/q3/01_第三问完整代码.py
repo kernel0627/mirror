@@ -586,6 +586,104 @@ def write_validation_table(output_dir: str | Path, validation_records: Iterable[
     return {'validation_table': table_path}
 
 # ========================================================================
+# 来源：src/heliostat/q1/plot.py
+# ========================================================================
+
+"""第一问的两张正式结果图。"""
+import csv
+import os
+import tempfile
+from pathlib import Path
+_mpl_config = Path(tempfile.gettempdir()) / 'cowork-matplotlib'
+_mpl_config.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault('MPLCONFIGDIR', str(_mpl_config))
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
+BLUE = '#2F5D7C'
+BLUE_DARK = '#173B54'
+BLUE_LIGHT = '#DCE9F1'
+ORANGE = '#D97706'
+DARK = '#24323D'
+GREY = '#76838F'
+LIGHT_GREY = '#D7DEE3'
+
+def _configure_style() -> None:
+    plt.rcParams.update({'font.family': 'sans-serif', 'font.sans-serif': ['Hiragino Sans GB', 'Arial Unicode MS', 'PingFang SC', 'Microsoft YaHei', 'SimHei', 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', 'DejaVu Sans'], 'axes.unicode_minus': False, 'figure.facecolor': 'white', 'axes.facecolor': 'white', 'axes.edgecolor': DARK, 'axes.labelcolor': DARK, 'axes.titlecolor': DARK, 'xtick.color': DARK, 'ytick.color': DARK, 'text.color': DARK, 'grid.color': LIGHT_GREY, 'grid.linewidth': 0.7, 'grid.alpha': 0.65})
+
+def _read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open('r', encoding='utf-8-sig', newline='') as handle:
+        return list(csv.DictReader(handle))
+
+def plot_monthly_performance(output_dir: str | Path) -> Path:
+    """绘制月平均综合光学效率和单位面积输出热功率。"""
+    _configure_style()
+    destination = Path(output_dir)
+    rows = _read_csv(destination / '03_月平均计算结果.csv')
+    months = np.array([int(row['month']) for row in rows])
+    optical = np.array([float(row['average_optical_efficiency']) for row in rows])
+    unit_power = np.array([float(row['unit_area_output_kw_m2']) for row in rows])
+    output_path = destination / '08_月平均光学性能与输出热功率.png'
+    (fig, (ax_efficiency, ax_power)) = plt.subplots(2, 1, figsize=(8.0, 6.3), sharex=True, gridspec_kw={'height_ratios': (1.0, 1.15), 'hspace': 0.12})
+    ax_efficiency.plot(months, optical, color=BLUE, linewidth=2.2, marker='o', markersize=5.0, markerfacecolor='white', markeredgewidth=1.5)
+    efficiency_padding = 0.02
+    ax_efficiency.set_ylim(max(0.0, float(np.min(optical)) - efficiency_padding), min(1.0, float(np.max(optical)) + efficiency_padding))
+    ax_efficiency.set_ylabel('综合光学效率')
+    ax_efficiency.grid(axis='y')
+    ax_efficiency.spines[['top', 'right']].set_visible(False)
+    ax_power.bar(months, unit_power, width=0.62, color=ORANGE, edgecolor='white', linewidth=0.8)
+    ax_power.set_ylim(0.0, float(np.max(unit_power)) * 1.14)
+    ax_power.set_ylabel('单位面积输出热功率 ($\\mathrm{kW\\,m^{-2}}$)')
+    ax_power.set_xlabel('月份')
+    ax_power.set_xticks(months)
+    ax_power.grid(axis='y')
+    ax_power.set_axisbelow(True)
+    ax_power.spines[['top', 'right']].set_visible(False)
+    fig.suptitle('月平均光学性能与输出热功率', fontsize=15, y=0.98)
+    fig.subplots_adjust(left=0.13, right=0.97, top=0.91, bottom=0.1)
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    return output_path
+
+def plot_mirror_annual_efficiency_map(output_dir: str | Path) -> Path:
+    """绘制 1745 面定日镜的年平均综合光学效率空间分布。"""
+    _configure_style()
+    destination = Path(output_dir)
+    rows = _read_csv(destination / '05_单镜年平均结果.csv')
+    x = np.array([float(row['x_m']) for row in rows])
+    y = np.array([float(row['y_m']) for row in rows])
+    optical = np.array([float(row['average_optical_efficiency']) for row in rows])
+    output_path = destination / '09_单镜年平均综合光学效率空间分布.png'
+    efficiency_cmap = LinearSegmentedColormap.from_list('heliostat_efficiency', (BLUE_LIGHT, '#8EB7CF', BLUE, BLUE_DARK))
+    (fig, ax) = plt.subplots(figsize=(7.4, 6.6))
+    points = ax.scatter(x, y, c=optical, cmap=efficiency_cmap, vmin=float(np.min(optical)), vmax=float(np.max(optical)), s=18, linewidths=0)
+    ax.scatter([0.0], [0.0], marker='*', s=190, color=ORANGE, edgecolor=DARK, linewidth=0.8, label='吸收塔', zorder=4)
+    limit = max(float(np.max(np.abs(x))), float(np.max(np.abs(y)))) + 20.0
+    ax.set_xlim(-limit, limit)
+    ax.set_ylim(-limit, limit)
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_xlabel('x 坐标 (m)')
+    ax.set_ylabel('y 坐标 (m)')
+    ax.set_title('单镜年平均综合光学效率空间分布', fontsize=15, pad=12)
+    ax.grid(color=LIGHT_GREY, linewidth=0.6, alpha=0.55)
+    ax.set_axisbelow(True)
+    ax.legend(loc='upper right', frameon=False)
+    colorbar = fig.colorbar(points, ax=ax, pad=0.025, fraction=0.047)
+    colorbar.set_label('年平均综合光学效率')
+    colorbar.outline.set_edgecolor(GREY)
+    colorbar.outline.set_linewidth(0.7)
+    fig.subplots_adjust(left=0.11, right=0.91, top=0.91, bottom=0.1)
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    return output_path
+
+def build_paper_figures(output_dir: str | Path) -> dict[str, Path]:
+    """生成第一问最终采用的两张结果图。"""
+    return {'monthly_performance': plot_monthly_performance(output_dir), 'mirror_efficiency_map': plot_mirror_annual_efficiency_map(output_dir)}
+
+# ========================================================================
 # 来源：src/heliostat/q1/solve.py
 # ========================================================================
 
@@ -1721,24 +1819,34 @@ def prepare_candidate(*, baseline: RefineBaseline, design: RefineDesign) -> tupl
     return (field, specifications, check)
 
 def evaluate_design(*, baseline: RefineBaseline, design: RefineDesign, profile: EvaluationProfile, cache: EvaluationCache | None=None) -> RefineEvaluation:
-    (field, specifications, check) = prepare_candidate(baseline=baseline, design=design)
+    field = build_refine_field(baseline, design)
+    return evaluate_field(baseline=baseline, design=design, field=field, profile=profile, cache=cache)
+
+def evaluate_field(*, baseline: RefineBaseline, design: RefineDesign, field: RefineField, profile: EvaluationProfile, cache: EvaluationCache | None=None) -> RefineEvaluation:
+    """评价固定镜位及显式分区归属，用于边界局部检验。"""
+    specifications = expand_specifications(field, design)
+    check = validate_heterogeneous_field(coordinates=field.coordinates, widths=specifications.widths, heights=specifications.heights, installation_heights=specifications.installation_heights, tower_x=baseline.parameters.tower_x, tower_y=design.tower_y, field_radius=baseline.parameters.field_radius, exclusion_radius=baseline.parameters.exclusion_radius, safety_epsilon=baseline.parameters.safety_epsilon)
     if not check.valid:
-        raise ValueError(check.reason or '六区微调候选几何不合法。')
+        raise ValueError(check.reason or '六区候选几何不合法。')
     raw = _evaluate_specifications(coordinates=field.coordinates, specifications=specifications, ring_indices=field.ring_indices, group_indices=field.group_indices, original_indices=field.original_indices, field_config=_field_config(baseline, design), profile=profile, safety_epsilon=baseline.parameters.safety_epsilon, cache=cache)
     return RefineEvaluation(design=design, field=field, specifications=specifications, raw=raw)
 
 def metrics(evaluation: RefineEvaluation, *, target_power_mw: float=42.0) -> dict[str, object]:
     annual = asdict(evaluation.raw.solution.annual_result)
     return {'profile': evaluation.profile_name, 'tower_mode': evaluation.design.tower_mode, 'tower_x_m': 0.0, 'tower_y_m': evaluation.design.tower_y, 'mirror_count': evaluation.mirror_count, 'mirror_set_hash': evaluation.field.mirror_set_hash, 'outer_clipped_count': evaluation.field.outer_clipped_count, 'total_area_m2': evaluation.total_area_m2, 'annual_power_mw': evaluation.annual_power_mw, 'power_margin_mw': evaluation.annual_power_mw - target_power_mw, 'unit_area_power_kw_m2': evaluation.unit_area_power_kw_m2, **annual}
-__all__ = ('EvaluationCache', 'RefineEvaluation', 'coarse_profile', 'dense_profile', 'evaluate_design', 'formal_profile', 'medium_profile', 'metrics', 'prepare_candidate', 'smoke_profile')
+__all__ = ('EvaluationCache', 'RefineEvaluation', 'coarse_profile', 'dense_profile', 'evaluate_design', 'evaluate_field', 'formal_profile', 'medium_profile', 'metrics', 'prepare_candidate', 'smoke_profile')
 
 # ========================================================================
 # 来源：src/heliostat/q3/sensitivity.py
 # ========================================================================
 
-"""六区 18 个规格变量的正负扰动与活跃变量筛选。"""
-from dataclasses import dataclass
+"""六区规格敏感性筛选与径向边界局部扰动。"""
+from dataclasses import dataclass, replace
+import numpy as np
 SPECIFICATION_VARIABLES = tuple((f'{prefix}{group}' for prefix in ('w', 'h', 'H') for group in range(1, 7)))
+BASE_BOUNDARIES = (1, 5, 11, 14, 20)
+BOUNDARY_SHIFTS = (-2, -1, 1, 2)
+RING_COUNT = 28
 
 @dataclass(frozen=True)
 class Perturbation:
@@ -1748,6 +1856,70 @@ class Perturbation:
     old_value: float
     new_value: float
     design: RefineDesign
+
+@dataclass(frozen=True)
+class BoundaryPerturbation:
+    """只移动一条内部边界的候选。"""
+    boundary_id: int
+    shift_rings: int
+    boundaries: tuple[int, ...]
+
+    @property
+    def original_end_ring(self) -> int:
+        return BASE_BOUNDARIES[self.boundary_id - 1]
+
+    @property
+    def new_end_ring(self) -> int:
+        return self.boundaries[self.boundary_id - 1]
+
+    @property
+    def label(self) -> str:
+        sign = '+' if self.shift_rings > 0 else ''
+        return f'B{self.boundary_id}{sign}{self.shift_rings}'
+
+def validate_boundaries(boundaries: tuple[int, ...]) -> None:
+    """验证五条边界能形成六个非空、连续的径向分区。"""
+    if len(boundaries) != len(BASE_BOUNDARIES):
+        raise ValueError('六区划分必须包含五条内部边界。')
+    if not all((isinstance(value, int) for value in boundaries)):
+        raise ValueError('边界必须使用整数圆环编号。')
+    if boundaries[0] < 1 or boundaries[-1] >= RING_COUNT:
+        raise ValueError('边界必须位于第 1 环至第 27 环。')
+    if any((left >= right for (left, right) in zip(boundaries, boundaries[1:]))):
+        raise ValueError('五条内部边界必须严格递增。')
+
+def boundary_perturbations() -> tuple[BoundaryPerturbation, ...]:
+    """生成全部合法的单边界正负 1--2 环扰动。"""
+    candidates: list[BoundaryPerturbation] = []
+    for (boundary_id, original) in enumerate(BASE_BOUNDARIES, start=1):
+        for shift in BOUNDARY_SHIFTS:
+            values = list(BASE_BOUNDARIES)
+            values[boundary_id - 1] = original + shift
+            boundaries = tuple(values)
+            try:
+                validate_boundaries(boundaries)
+            except ValueError:
+                continue
+            candidates.append(BoundaryPerturbation(boundary_id=boundary_id, shift_rings=shift, boundaries=boundaries))
+    return tuple(candidates)
+
+def group_indices_for_boundaries(ring_indices: np.ndarray, boundaries: tuple[int, ...]) -> np.ndarray:
+    """按每组末环编号把逐镜圆环映射为从 0 开始的分区编号。"""
+    validate_boundaries(boundaries)
+    rings = np.asarray(ring_indices, dtype=np.int64)
+    if rings.ndim != 1 or rings.size == 0:
+        raise ValueError('ring_indices 必须是一维非空数组。')
+    if int(np.min(rings)) < 1 or int(np.max(rings)) > RING_COUNT:
+        raise ValueError('ring_indices 必须位于第 1 环至第 28 环。')
+    return np.searchsorted(np.asarray(boundaries, dtype=np.int64), rings, side='left').astype(np.int64, copy=False)
+
+def reassign_boundary_groups(field: RefineField, boundaries: tuple[int, ...]) -> RefineField:
+    """固定塔位与镜位，只更新逐镜所属分区。"""
+    return replace(field, group_indices=group_indices_for_boundaries(field.ring_indices, boundaries))
+
+def moved_mirror_count(field: RefineField, boundaries: tuple[int, ...]) -> int:
+    assigned = group_indices_for_boundaries(field.ring_indices, boundaries)
+    return int(np.count_nonzero(assigned != field.group_indices))
 
 def specification_perturbations(design: RefineDesign, *, step_m: float=0.1) -> tuple[Perturbation, ...]:
     if step_m <= 0.0:
@@ -2003,7 +2175,7 @@ def _csv(path: Path, rows: Iterable[dict[str, object]]) -> Path:
 def _comparison_record(label: str, evaluation: RefineEvaluation, *, target_power_mw: float) -> dict[str, object]:
     return {'scheme': label, **metrics(evaluation, target_power_mw=target_power_mw)}
 
-def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regression: dict[str, object], tower_rows: list[dict[str, object]], geometry_rows: list[dict[str, object]], sensitivity_rows: list[dict[str, object]], active_payload: dict[str, object], search_trace: Iterable[dict[str, object]], formal_rows: list[dict[str, object]], baseline_formal: RefineEvaluation, preclosure_formal: RefineEvaluation, attempted_formal: RefineEvaluation, selected_formal: RefineEvaluation, selected_design: RefineDesign, dense_payload: dict[str, object], result3_template: str | Path, target_power_mw: float, decision: str, closure_rows: Iterable[dict[str, object]], closure_payload: dict[str, object]) -> dict[str, Path]:
+def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regression: dict[str, object], tower_rows: list[dict[str, object]], geometry_rows: list[dict[str, object]], sensitivity_rows: list[dict[str, object]], active_payload: dict[str, object], search_trace: Iterable[dict[str, object]], formal_rows: list[dict[str, object]], baseline_formal: RefineEvaluation, preclosure_formal: RefineEvaluation, attempted_formal: RefineEvaluation, selected_formal: RefineEvaluation, selected_design: RefineDesign, dense_payload: dict[str, object], result3_template: str | Path, target_power_mw: float, decision: str, closure_rows: Iterable[dict[str, object]], closure_payload: dict[str, object], boundary_rows: list[dict[str, object]]) -> dict[str, Path]:
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
@@ -2028,6 +2200,7 @@ def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regressio
     paths['dense'] = _json(destination / '12_加密验收比较.json', dense_payload)
     paths['geometry'] = _json(destination / '13_几何约束验证.json', {'valid': selected_formal.geometry.valid, 'details': asdict(selected_formal.geometry), 'mirror_set_hash': selected_formal.field.mirror_set_hash, 'outer_clipped_count': selected_formal.field.outer_clipped_count, 'group_counts': list(selected_formal.field.group_counts)})
     paths['closure'] = _csv(destination / '14_局部收口检查.csv', closure_rows)
+    paths['boundary'] = _csv(destination / '20_六区边界局部敏感性检验.csv', boundary_rows)
     workbook = destination / 'result3.xlsx'
     write_result3_workbook(template_path=result3_template, output_path=workbook, evaluation=selected_formal.raw, tower_x=baseline.parameters.tower_x, tower_y=selected_design.tower_y)
     paths['workbook'] = workbook
@@ -2041,6 +2214,17 @@ def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regressio
     lines.extend(('', '## 表 S3-3 最终六区规格', '', '| 分区 | 镜子数 | 宽度 (m) | 高度 (m) | 安装高度 (m) |', '| ---: | ---: | ---: | ---: | ---: |'))
     for row in group_rows:
         lines.append(f"| G{row['group']} | {row['mirror_count']} | {row['mirror_width_m']:.6f} | {row['mirror_height_m']:.6f} | {row['installation_height_m']:.6f} |")
+    lines.extend(('', '## 表 S3-4 六区边界局部合理性检验', ''))
+    if bool(regression.get('smoke')):
+        lines.extend(('smoke 仅验证 18 个边界候选的生成、评价、导出和绘图链路；数值及分类不得用于论文结论。',))
+    else:
+        boundary_counts = {classification: sum((row['classification'] == classification for row in boundary_rows)) for classification in ('功率可行但q下降', 'q提高但功率不达标', '功率与q均不占优')}
+        q_sensitivity: dict[int, float] = {}
+        for boundary_id in range(1, 6):
+            candidates = [row for row in boundary_rows if int(row['boundary_id']) == boundary_id]
+            q_sensitivity[boundary_id] = max((abs(float(row['formal_delta_q_kw_m2'])) / abs(int(row['shift_rings'])) for row in candidates))
+        most_sensitive = max(q_sensitivity, key=q_sensitivity.get)
+        lines.extend((f'零扰动正式评价复现最终方案：$P_0={selected_formal.annual_power_mw:.9f}\\ \\mathrm{{MW}}$，$q_0={selected_formal.unit_area_power_kw_m2:.9f}\\ \\mathrm{{kW/m^2}}$。', '', '| 正式分类 | 候选数 |', '| --- | ---: |', f"| 功率可行但 $q$ 下降 | {boundary_counts['功率可行但q下降']} |", f"| $q$ 提高但功率不达标 | {boundary_counts['q提高但功率不达标']} |", f"| 功率与 $q$ 均不占优 | {boundary_counts['功率与q均不占优']} |", '', f'18 个合法单边界候选均完成中精度和正式精度评价；未发现同时满足 $42\\ \\mathrm{{MW}}$ 功率约束并提高 $q$ 的候选，因此保留边界 $(1,5,11,14,20)$。B{most_sensitive} 是本次单位面积输出局部检验中最敏感的边界。'))
     lines.extend(('', '## 验收说明', '', '塔位模式 A 与 B 分开扫描；搜索轨迹固定使用已选模式。中精度仅用于排序和局部接受，最终判定来自同口径正式精度及 80/100 m 加密比较。', ''))
     table = destination / '15_论文结果与验证表.md'
     table.write_text('\n'.join(lines) + '\n', encoding='utf-8')
@@ -2178,6 +2362,36 @@ def plot_final_field(*, baseline: RefineBaseline, selected: RefineDesign, evalua
     plt.close(figure)
     return path
 
+def plot_boundary_sensitivity(rows: list[dict[str, object]], *, output_dir: str | Path) -> Path:
+    """绘制全部单边界候选的正式 Δq、功率余量和分类。"""
+    configure_matplotlib()
+    labels = [str(row['candidate']) for row in rows]
+    positions = np.arange(len(labels))
+    category_order = ('功率可行但q下降', 'q提高但功率不达标', '功率与q均不占优', 'smoke仅验证链路')
+    colors = {'功率可行但q下降': '#2A9D8F', 'q提高但功率不达标': '#E76F51', '功率与q均不占优': '#7A7A7A', 'smoke仅验证链路': '#5E60CE'}
+    categories = tuple((category for category in category_order if any((row['classification'] == category for row in rows))))
+    bar_colors = [colors[str(row['classification'])] for row in rows]
+    delta_q = [float(row['formal_delta_q_kw_m2']) for row in rows]
+    power_margin = [float(row['formal_power_margin_mw']) for row in rows]
+    (figure, axes) = plt.subplots(2, 1, figsize=(12.5, 7.2), sharex=True)
+    axes[0].bar(positions, delta_q, color=bar_colors, alpha=0.9)
+    axes[0].axhline(0.0, color='black', linewidth=0.8)
+    axes[0].set_ylabel('正式 Δq / (kW/m²)')
+    axes[0].set_title('图 S3-5 六区边界单因素局部敏感性检验')
+    axes[0].grid(axis='y', alpha=0.25)
+    axes[0].legend(handles=[Patch(color=colors[category], label=category) for category in categories], loc='best')
+    axes[1].bar(positions, power_margin, color=bar_colors, alpha=0.9)
+    axes[1].axhline(0.0, color='black', linewidth=0.8, linestyle='--')
+    axes[1].set_ylabel('正式功率余量 / MW')
+    axes[1].set_xlabel('边界候选（B1--B5，数字为移动环数）')
+    axes[1].set_xticks(positions, labels, rotation=45, ha='right')
+    axes[1].grid(axis='y', alpha=0.25)
+    figure.tight_layout()
+    path = Path(output_dir) / '21_六区边界局部敏感性图.png'
+    figure.savefig(path, dpi=220)
+    plt.close(figure)
+    return path
+
 def generate_figures(**kwargs: object) -> tuple[Path, Path, Path, Path]:
     configure_matplotlib()
     return (plot_sensitivity(kwargs['sensitivity_rows'], tower_rows=kwargs['tower_rows'], geometry_rows=kwargs['geometry_rows'], selected_tower_mode=kwargs['selected_tower_mode'], output_dir=kwargs['output_dir']), plot_group_parameters(kwargs['baseline'], kwargs['selected_design'], kwargs['output_dir']), plot_metric_comparison(baseline_formal=kwargs['baseline_formal'], candidate_formal=kwargs['candidate_formal'], dense_payload=kwargs['dense_payload'], output_dir=kwargs['output_dir']), plot_final_field(baseline=kwargs['baseline'], selected=kwargs['selected_design'], evaluation=kwargs['selected_formal'], output_dir=kwargs['output_dir']))
@@ -2284,7 +2498,7 @@ def run(argv: Sequence[str] | None=None) -> int:
             else:
                 formal_count += 1
         return (evaluation, None)
-    print('阶段 0/5：六组正式初值回归', flush=True)
+    print('阶段 0/6：六组正式初值回归', flush=True)
     (baseline_formal, reason) = try_evaluate(baseline.design, profile_kind='formal', count_candidate=False)
     if baseline_formal is None:
         raise RuntimeError(f'六组回归无法评价：{reason}')
@@ -2296,7 +2510,7 @@ def run(argv: Sequence[str] | None=None) -> int:
     if baseline_medium is None:
         raise RuntimeError(f'六组中精度基准无法评价：{reason}')
     formal_rows: list[dict[str, object]] = []
-    print('阶段 1/5：塔位模式 A/B 独立扫描', flush=True)
+    print('阶段 1/6：塔位模式 A/B 独立扫描', flush=True)
     tower_internal: list[dict[str, object]] = []
     tower_rows: list[dict[str, object]] = []
     for mode in ('A', 'B'):
@@ -2345,7 +2559,7 @@ def run(argv: Sequence[str] | None=None) -> int:
         tower_active = not math.isclose(current_design.tower_y, baseline.design.tower_y)
         tower_decision = f'正式精度选择模式 {current_design.tower_mode}'
     print(f'塔位语义：{tower_decision}；y={current_design.tower_y:.6f} m', flush=True)
-    print('阶段 2/5：D1、g 一维粗扫及 3×3 局部组合', flush=True)
+    print('阶段 2/6：D1、g 一维粗扫及 3×3 局部组合', flush=True)
     geometry_origin = current_design
     geometry_origin_formal = current_formal
     (geometry_origin_medium, reason) = try_evaluate(geometry_origin, profile_kind='medium', count_candidate=False)
@@ -2391,7 +2605,7 @@ def run(argv: Sequence[str] | None=None) -> int:
             current_formal = geometry_formal
     geometry_active = tuple((parameter for parameter in ('initial_spacing', 'spacing_growth') if not math.isclose(current_design.parameter(parameter), geometry_origin.parameter(parameter))))
     print(f'几何固定点：D1={current_design.initial_spacing:.6f} m，g={current_design.spacing_growth:.6f} m/环', flush=True)
-    print('阶段 3/5：18 个六区规格变量正负敏感性', flush=True)
+    print('阶段 3/6：18 个六区规格变量正负敏感性', flush=True)
     (sensitivity_reference, reason) = try_evaluate(current_design, profile_kind='medium', count_candidate=False)
     if sensitivity_reference is None:
         raise RuntimeError(f'敏感性中精度基准无法评价：{reason}')
@@ -2418,7 +2632,7 @@ def run(argv: Sequence[str] | None=None) -> int:
     specification_active = active_from_formal(sensitivity_rows, reference_q=current_formal.unit_area_power_kw_m2, target_power_mw=args.target_power, threshold=args.move_q)
     active_variables = (*(('tower_y',) if tower_active else ()), *geometry_active, *specification_active)
     print(f"正式确认的活跃变量：{active_variables or '无'}", flush=True)
-    print('阶段 4/5：活跃变量两轮分块回扫', flush=True)
+    print('阶段 4/6：活跃变量两轮分块回扫', flush=True)
     local_initial = sensitivity_reference
 
     def local_evaluator(design: RefineDesign) -> RefineEvaluation | None:
@@ -2431,7 +2645,7 @@ def run(argv: Sequence[str] | None=None) -> int:
     if attempted_formal is None:
         raise RuntimeError(f'最终候选正式复算失败：{reason}')
     formal_rows.append({'stage': 'final_acceptance', 'candidate': 'local-search-best', **metrics(attempted_formal, target_power_mw=args.target_power), 'delta_q_from_six': attempted_formal.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2})
-    print('阶段 5/5：塔位包围扫描与正式精度最细邻域收口', flush=True)
+    print('阶段 5/6：塔位包围扫描与正式精度最细邻域收口', flush=True)
     preclosure_formal = attempted_formal
     closure_values: dict[RefineDesign, RefineEvaluation] = {search.best_design: attempted_formal}
     closure_count = 0
@@ -2480,13 +2694,58 @@ def run(argv: Sequence[str] | None=None) -> int:
         selected_design = baseline.design
         selected_formal = baseline_formal
         decision = '微调候选未通过统一验收，保留原六组正式方案'
+    print('阶段 6/6：六区边界局部敏感性检验', flush=True)
+    boundary_field = build_refine_field(baseline, selected_design)
+    base_groups = group_indices_for_boundaries(boundary_field.ring_indices, BASE_BOUNDARIES)
+    if not np.array_equal(boundary_field.group_indices, base_groups):
+        raise RuntimeError('最终镜场分区与六区边界基准不一致。')
+    boundary_medium_cache = EvaluationCache()
+    boundary_formal_cache = EvaluationCache()
+    boundary_formal_baseline = evaluate_field(baseline=baseline, design=selected_design, field=boundary_field, profile=verification_profile, cache=boundary_formal_cache)
+    if not args.smoke:
+        boundary_regression = abs(boundary_formal_baseline.total_area_m2 - selected_formal.total_area_m2) <= 1e-06 and abs(boundary_formal_baseline.annual_power_mw - selected_formal.annual_power_mw) <= 1e-06 and (abs(boundary_formal_baseline.unit_area_power_kw_m2 - selected_formal.unit_area_power_kw_m2) <= 1e-09)
+        if not boundary_regression:
+            raise RuntimeError('六区边界零扰动正式回归失败。')
+    boundary_rows: list[dict[str, object]] = []
+    for candidate in boundary_perturbations():
+        candidate_field = reassign_boundary_groups(boundary_field, candidate.boundaries)
+        groups = candidate_field.group_counts
+        row: dict[str, object] = {'boundary_id': candidate.boundary_id, 'candidate': candidate.label, 'original_end_ring': candidate.original_end_ring, 'shift_rings': candidate.shift_rings, 'new_end_ring': candidate.new_end_ring, 'boundaries': '|'.join((str(value) for value in candidate.boundaries)), 'moved_mirror_count': moved_mirror_count(boundary_field, candidate.boundaries), 'group_counts': '|'.join((str(value) for value in groups))}
+        try:
+            medium = evaluate_field(baseline=baseline, design=selected_design, field=candidate_field, profile=search_profile, cache=boundary_medium_cache)
+            formal = evaluate_field(baseline=baseline, design=selected_design, field=candidate_field, profile=verification_profile, cache=boundary_formal_cache)
+        except ValueError as exc:
+            if not args.smoke:
+                raise
+            row.update({'total_area_m2': math.nan, 'medium_power_mw': math.nan, 'medium_q_kw_m2': math.nan, 'formal_power_mw': math.nan, 'formal_power_margin_mw': math.nan, 'formal_q_kw_m2': math.nan, 'formal_delta_power_mw': math.nan, 'formal_delta_q_kw_m2': math.nan, 'formal_feasible': False, 'q_better_than_baseline': False, 'classification': 'smoke仅验证链路', 'smoke_reject_reason': str(exc)})
+            boundary_rows.append(row)
+            continue
+        formal_feasible = formal.is_feasible(args.target_power)
+        q_better = formal.unit_area_power_kw_m2 > boundary_formal_baseline.unit_area_power_kw_m2
+        if formal_feasible and q_better:
+            if not args.smoke:
+                raise RuntimeError(f'边界候选 {candidate.label} 同时满足功率约束并提高 q，当前最终方案需要重新审定。')
+            classification = 'smoke仅验证链路'
+        elif formal_feasible:
+            classification = '功率可行但q下降'
+        elif q_better:
+            classification = 'q提高但功率不达标'
+        else:
+            classification = '功率与q均不占优'
+        row.update({'total_area_m2': formal.total_area_m2, 'medium_power_mw': medium.annual_power_mw, 'medium_q_kw_m2': medium.unit_area_power_kw_m2, 'formal_power_mw': formal.annual_power_mw, 'formal_power_margin_mw': formal.annual_power_mw - args.target_power, 'formal_q_kw_m2': formal.unit_area_power_kw_m2, 'formal_delta_power_mw': formal.annual_power_mw - boundary_formal_baseline.annual_power_mw, 'formal_delta_q_kw_m2': formal.unit_area_power_kw_m2 - boundary_formal_baseline.unit_area_power_kw_m2, 'formal_feasible': formal_feasible, 'q_better_than_baseline': q_better, 'classification': classification})
+        boundary_rows.append(row)
+    if args.smoke:
+        print('边界检验 smoke 链路完成：18 个候选均已评价。', flush=True)
+    else:
+        print('边界检验完成：18 个候选均已执行中精度和正式精度评价，未发现可直接替换当前边界的可行改进。', flush=True)
     active_payload = {'tower_mode_decision': tower_decision, 'selected_tower_mode': current_design.tower_mode, 'active_variables': list(active_variables), 'tower_active': tower_active, 'geometry_active': list(geometry_active), 'specification_active': list(specification_active), 'medium_candidate_count': medium_count, 'medium_candidate_limit': args.medium_limit, 'formal_candidate_count': formal_count, 'formal_candidate_limit': args.formal_limit, 'maximum_joint_sweeps': args.max_sweeps, 'closure': {'tower_bracketed': closure.tower_bracketed, 'local_converged': closure.local_converged, 'local_check_completed': closure.local_sweeps >= 1, 'local_sweeps': closure.local_sweeps, 'accepted_moves': sum((bool(row['accepted']) for row in closure.trace)), 'formal_evaluations': closure_count}}
     regression['smoke'] = args.smoke
     regression['candidate_budgets'] = {'medium': {'used': medium_count, 'limit': args.medium_limit}, 'formal': {'used': formal_count, 'limit': args.formal_limit}}
-    written = write_results(output_dir=args.output, baseline=baseline, regression=regression, tower_rows=tower_rows, geometry_rows=geometry_rows, sensitivity_rows=sensitivity_rows, active_payload=active_payload, search_trace=search.trace, formal_rows=formal_rows, baseline_formal=baseline_formal, preclosure_formal=preclosure_formal, attempted_formal=attempted_formal, selected_formal=selected_formal, selected_design=selected_design, dense_payload=dense_payload, result3_template=args.result3_template, target_power_mw=args.target_power, decision=decision, closure_rows=closure.trace, closure_payload=active_payload['closure'])
+    written = write_results(output_dir=args.output, baseline=baseline, regression=regression, tower_rows=tower_rows, geometry_rows=geometry_rows, sensitivity_rows=sensitivity_rows, active_payload=active_payload, search_trace=search.trace, formal_rows=formal_rows, baseline_formal=baseline_formal, preclosure_formal=preclosure_formal, attempted_formal=attempted_formal, selected_formal=selected_formal, selected_design=selected_design, dense_payload=dense_payload, result3_template=args.result3_template, target_power_mw=args.target_power, decision=decision, closure_rows=closure.trace, closure_payload=active_payload['closure'], boundary_rows=boundary_rows)
     figures = generate_figures(sensitivity_rows=sensitivity_rows, tower_rows=tower_rows, geometry_rows=geometry_rows, selected_tower_mode=current_design.tower_mode, baseline=baseline, selected_design=selected_design, baseline_formal=baseline_formal, candidate_formal=selected_formal, selected_formal=selected_formal, dense_payload=dense_payload, output_dir=args.output)
     for (index, path) in enumerate(figures, start=16):
         written[f'figure_{index}'] = path
+    written['boundary_figure'] = plot_boundary_sensitivity(boundary_rows, output_dir=args.output)
     print('\n六区参数微调结果', flush=True)
     print(f'判定：{decision}', flush=True)
     print(f'正式候选：P={attempted_formal.annual_power_mw:.9f} MW', flush=True)

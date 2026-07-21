@@ -299,6 +299,65 @@ def plot_final_field(
     return path
 
 
+def plot_boundary_sensitivity(
+    rows: list[dict[str, object]],
+    *,
+    output_dir: str | Path,
+) -> Path:
+    """绘制全部单边界候选的正式 Δq、功率余量和分类。"""
+
+    configure_matplotlib()
+    labels = [str(row["candidate"]) for row in rows]
+    positions = np.arange(len(labels))
+    category_order = (
+        "功率可行但q下降",
+        "q提高但功率不达标",
+        "功率与q均不占优",
+        "smoke仅验证链路",
+    )
+    colors = {
+        "功率可行但q下降": "#2A9D8F",
+        "q提高但功率不达标": "#E76F51",
+        "功率与q均不占优": "#7A7A7A",
+        "smoke仅验证链路": "#5E60CE",
+    }
+    categories = tuple(
+        category
+        for category in category_order
+        if any(row["classification"] == category for row in rows)
+    )
+    bar_colors = [colors[str(row["classification"])] for row in rows]
+    delta_q = [float(row["formal_delta_q_kw_m2"]) for row in rows]
+    power_margin = [float(row["formal_power_margin_mw"]) for row in rows]
+
+    figure, axes = plt.subplots(2, 1, figsize=(12.5, 7.2), sharex=True)
+    axes[0].bar(positions, delta_q, color=bar_colors, alpha=0.9)
+    axes[0].axhline(0.0, color="black", linewidth=0.8)
+    axes[0].set_ylabel("正式 Δq / (kW/m²)")
+    axes[0].set_title("图 S3-5 六区边界单因素局部敏感性检验")
+    axes[0].grid(axis="y", alpha=0.25)
+    axes[0].legend(
+        handles=[
+            Patch(color=colors[category], label=category)
+            for category in categories
+        ],
+        loc="best",
+    )
+
+    axes[1].bar(positions, power_margin, color=bar_colors, alpha=0.9)
+    axes[1].axhline(0.0, color="black", linewidth=0.8, linestyle="--")
+    axes[1].set_ylabel("正式功率余量 / MW")
+    axes[1].set_xlabel("边界候选（B1--B5，数字为移动环数）")
+    axes[1].set_xticks(positions, labels, rotation=45, ha="right")
+    axes[1].grid(axis="y", alpha=0.25)
+
+    figure.tight_layout()
+    path = Path(output_dir) / "21_六区边界局部敏感性图.png"
+    figure.savefig(path, dpi=220)
+    plt.close(figure)
+    return path
+
+
 def generate_figures(**kwargs: object) -> tuple[Path, Path, Path, Path]:
     configure_matplotlib()
     return (

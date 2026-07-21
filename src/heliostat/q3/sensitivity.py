@@ -1,10 +1,12 @@
-"""六区 18 个规格变量的正负扰动与活跃变量筛选。"""
+"""六区规格敏感性筛选与径向边界局部扰动。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from .model import RefineDesign
+import numpy as np
+
+from .model import RefineDesign, RefineField
 
 
 SPECIFICATION_VARIABLES = tuple(
@@ -12,6 +14,9 @@ SPECIFICATION_VARIABLES = tuple(
     for prefix in ("w", "h", "H")
     for group in range(1, 7)
 )
+BASE_BOUNDARIES = (1, 5, 11, 14, 20)
+BOUNDARY_SHIFTS = (-2, -1, 1, 2)
+RING_COUNT = 28
 
 
 @dataclass(frozen=True)
@@ -22,6 +27,106 @@ class Perturbation:
     old_value: float
     new_value: float
     design: RefineDesign
+
+
+@dataclass(frozen=True)
+class BoundaryPerturbation:
+    """只移动一条内部边界的候选。"""
+
+    boundary_id: int
+    shift_rings: int
+    boundaries: tuple[int, ...]
+
+    @property
+    def original_end_ring(self) -> int:
+        return BASE_BOUNDARIES[self.boundary_id - 1]
+
+    @property
+    def new_end_ring(self) -> int:
+        return self.boundaries[self.boundary_id - 1]
+
+    @property
+    def label(self) -> str:
+        sign = "+" if self.shift_rings > 0 else ""
+        return f"B{self.boundary_id}{sign}{self.shift_rings}"
+
+
+def validate_boundaries(boundaries: tuple[int, ...]) -> None:
+    """验证五条边界能形成六个非空、连续的径向分区。"""
+
+    if len(boundaries) != len(BASE_BOUNDARIES):
+        raise ValueError("六区划分必须包含五条内部边界。")
+    if not all(isinstance(value, int) for value in boundaries):
+        raise ValueError("边界必须使用整数圆环编号。")
+    if boundaries[0] < 1 or boundaries[-1] >= RING_COUNT:
+        raise ValueError("边界必须位于第 1 环至第 27 环。")
+    if any(left >= right for left, right in zip(boundaries, boundaries[1:])):
+        raise ValueError("五条内部边界必须严格递增。")
+
+
+def boundary_perturbations() -> tuple[BoundaryPerturbation, ...]:
+    """生成全部合法的单边界正负 1--2 环扰动。"""
+
+    candidates: list[BoundaryPerturbation] = []
+    for boundary_id, original in enumerate(BASE_BOUNDARIES, start=1):
+        for shift in BOUNDARY_SHIFTS:
+            values = list(BASE_BOUNDARIES)
+            values[boundary_id - 1] = original + shift
+            boundaries = tuple(values)
+            try:
+                validate_boundaries(boundaries)
+            except ValueError:
+                continue
+            candidates.append(
+                BoundaryPerturbation(
+                    boundary_id=boundary_id,
+                    shift_rings=shift,
+                    boundaries=boundaries,
+                )
+            )
+    return tuple(candidates)
+
+
+def group_indices_for_boundaries(
+    ring_indices: np.ndarray,
+    boundaries: tuple[int, ...],
+) -> np.ndarray:
+    """按每组末环编号把逐镜圆环映射为从 0 开始的分区编号。"""
+
+    validate_boundaries(boundaries)
+    rings = np.asarray(ring_indices, dtype=np.int64)
+    if rings.ndim != 1 or rings.size == 0:
+        raise ValueError("ring_indices 必须是一维非空数组。")
+    if int(np.min(rings)) < 1 or int(np.max(rings)) > RING_COUNT:
+        raise ValueError("ring_indices 必须位于第 1 环至第 28 环。")
+    return np.searchsorted(
+        np.asarray(boundaries, dtype=np.int64),
+        rings,
+        side="left",
+    ).astype(np.int64, copy=False)
+
+
+def reassign_boundary_groups(
+    field: RefineField,
+    boundaries: tuple[int, ...],
+) -> RefineField:
+    """固定塔位与镜位，只更新逐镜所属分区。"""
+
+    return replace(
+        field,
+        group_indices=group_indices_for_boundaries(
+            field.ring_indices,
+            boundaries,
+        ),
+    )
+
+
+def moved_mirror_count(
+    field: RefineField,
+    boundaries: tuple[int, ...],
+) -> int:
+    assigned = group_indices_for_boundaries(field.ring_indices, boundaries)
+    return int(np.count_nonzero(assigned != field.group_indices))
 
 
 def specification_perturbations(

@@ -16,8 +16,14 @@ from heliostat.q3.evaluate import (
     prepare_candidate,
     smoke_profile,
 )
-from heliostat.q3.model import load_baseline
-from heliostat.q3.sensitivity import specification_perturbations
+from heliostat.q3.model import RefineDesign, load_baseline
+from heliostat.q3.sensitivity import (
+    BASE_BOUNDARIES,
+    boundary_perturbations,
+    group_indices_for_boundaries,
+    moved_mirror_count,
+    specification_perturbations,
+)
 from heliostat.q3.search import coordinate_search
 from heliostat.q3.tower_modes import build_refine_field
 
@@ -154,8 +160,119 @@ class SixGroupRefineModelTests(unittest.TestCase):
             {-0.1, 0.0, 0.1},
         )
 
+    def test_boundary_scan_has_18_legal_single_boundary_candidates(self) -> None:
+        candidates = boundary_perturbations()
+        self.assertEqual(len(candidates), 18)
+        self.assertEqual(
+            {candidate.shift_rings for candidate in candidates if candidate.boundary_id == 1},
+            {1, 2},
+        )
+        for candidate in candidates:
+            changed = [
+                index
+                for index, (before, after) in enumerate(
+                    zip(BASE_BOUNDARIES, candidate.boundaries)
+                )
+                if before != after
+            ]
+            self.assertEqual(changed, [candidate.boundary_id - 1])
+
+    def test_boundary_assignment_reproduces_and_locally_moves_groups(self) -> None:
+        comparison = json.loads(
+            Path("outputs/q3/11_正式结果比较.json").read_text(encoding="utf-8")
+        )
+        selected = comparison["selected_design"]
+        design = RefineDesign(
+            tower_mode=selected["tower_mode"],
+            tower_y=float(selected["tower_y_m"]),
+            initial_spacing=float(selected["initial_spacing_m"]),
+            spacing_growth=float(selected["spacing_growth_m_per_ring"]),
+            widths=tuple(float(value) for value in selected["widths_m"]),
+            mirror_heights=tuple(
+                float(value) for value in selected["mirror_heights_m"]
+            ),
+            installation_heights=tuple(
+                float(value) for value in selected["installation_heights_m"]
+            ),
+        )
+        field = build_refine_field(self.baseline, design)
+        reproduced = group_indices_for_boundaries(
+            field.ring_indices,
+            BASE_BOUNDARIES,
+        )
+        np.testing.assert_array_equal(reproduced, field.group_indices)
+
+        moved = group_indices_for_boundaries(
+            field.ring_indices,
+            (1, 5, 11, 14, 18),
+        )
+        affected = np.isin(field.ring_indices, (19, 20))
+        self.assertEqual(
+            moved_mirror_count(field, (1, 5, 11, 14, 18)),
+            int(np.count_nonzero(affected)),
+        )
+        np.testing.assert_array_equal(moved[affected], np.full(affected.sum(), 5))
+        np.testing.assert_array_equal(
+            moved[~affected],
+            field.group_indices[~affected],
+        )
+
 
 class Question3DeliverableTests(unittest.TestCase):
+    def test_boundary_check_covers_every_candidate_and_keeps_baseline(self) -> None:
+        with Path("outputs/q3/20_六区边界局部敏感性检验.csv").open(
+            encoding="utf-8-sig",
+            newline="",
+        ) as handle:
+            rows = list(csv.DictReader(handle))
+
+        expected = {candidate.label for candidate in boundary_perturbations()}
+        self.assertEqual(len(rows), 18)
+        self.assertEqual({row["candidate"] for row in rows}, expected)
+        self.assertTrue(
+            {
+                "boundary_id",
+                "original_end_ring",
+                "shift_rings",
+                "new_end_ring",
+                "boundaries",
+                "moved_mirror_count",
+                "group_counts",
+                "total_area_m2",
+                "medium_power_mw",
+                "medium_q_kw_m2",
+                "formal_power_mw",
+                "formal_power_margin_mw",
+                "formal_q_kw_m2",
+                "formal_delta_power_mw",
+                "formal_delta_q_kw_m2",
+                "formal_feasible",
+                "q_better_than_baseline",
+                "classification",
+            }.issubset(rows[0])
+        )
+        self.assertEqual(
+            sum(row["formal_feasible"] == "True" for row in rows),
+            8,
+        )
+        self.assertEqual(
+            sum(row["q_better_than_baseline"] == "True" for row in rows),
+            8,
+        )
+        self.assertEqual(
+            {row["classification"] for row in rows},
+            {
+                "功率可行但q下降",
+                "q提高但功率不达标",
+                "功率与q均不占优",
+            },
+        )
+        self.assertTrue(Path("outputs/q3/21_六区边界局部敏感性图.png").is_file())
+        self.assertFalse(Path("outputs/q3_boundary_check").exists())
+        self.assertFalse(Path("src/solve_q3_boundary.py").exists())
+        self.assertFalse(Path("src/heliostat/q3/boundary.py").exists())
+        self.assertFalse(Path("src/heliostat/q3/boundary_check.py").exists())
+
     def test_result3_matches_template_and_every_csv_row(self) -> None:
         output = Path("outputs/q3/result3.xlsx")
         self.assertTrue(output.is_file())

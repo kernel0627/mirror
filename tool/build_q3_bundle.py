@@ -17,6 +17,7 @@ SOURCE_PATHS = (
     "src/heliostat/io.py",
     "src/heliostat/q1/aggregate.py",
     "src/heliostat/q1/export.py",
+    "src/heliostat/q1/plot.py",
     "src/heliostat/q1/solve.py",
     "src/heliostat/q2/layout.py",
     "src/heliostat/q2/evaluate.py",

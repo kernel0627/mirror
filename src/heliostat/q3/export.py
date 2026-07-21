@@ -73,6 +73,7 @@ def write_results(
     decision: str,
     closure_rows: Iterable[dict[str, object]],
     closure_payload: dict[str, object],
+    boundary_rows: list[dict[str, object]],
 ) -> dict[str, Path]:
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -155,6 +156,10 @@ def write_results(
         destination / "14_局部收口检查.csv",
         closure_rows,
     )
+    paths["boundary"] = _csv(
+        destination / "20_六区边界局部敏感性检验.csv",
+        boundary_rows,
+    )
     workbook = destination / "result3.xlsx"
     write_result3_workbook(
         template_path=result3_template,
@@ -234,6 +239,64 @@ def write_results(
             f"| G{row['group']} | {row['mirror_count']} "
             f"| {row['mirror_width_m']:.6f} | {row['mirror_height_m']:.6f} "
             f"| {row['installation_height_m']:.6f} |"
+        )
+    lines.extend(
+        (
+            "",
+            "## 表 S3-4 六区边界局部合理性检验",
+            "",
+        )
+    )
+    if bool(regression.get("smoke")):
+        lines.extend(
+            (
+                "smoke 仅验证 18 个边界候选的生成、评价、导出和绘图链路；"
+                "数值及分类不得用于论文结论。",
+            )
+        )
+    else:
+        boundary_counts = {
+            classification: sum(
+                row["classification"] == classification
+                for row in boundary_rows
+            )
+            for classification in (
+                "功率可行但q下降",
+                "q提高但功率不达标",
+                "功率与q均不占优",
+            )
+        }
+        q_sensitivity: dict[int, float] = {}
+        for boundary_id in range(1, 6):
+            candidates = [
+                row
+                for row in boundary_rows
+                if int(row["boundary_id"]) == boundary_id
+            ]
+            q_sensitivity[boundary_id] = max(
+                abs(float(row["formal_delta_q_kw_m2"]))
+                / abs(int(row["shift_rings"]))
+                for row in candidates
+            )
+        most_sensitive = max(q_sensitivity, key=q_sensitivity.get)
+        lines.extend(
+            (
+                "零扰动正式评价复现最终方案："
+                f"$P_0={selected_formal.annual_power_mw:.9f}\\ \\mathrm{{MW}}$，"
+                f"$q_0={selected_formal.unit_area_power_kw_m2:.9f}"
+                "\\ \\mathrm{kW/m^2}$。",
+                "",
+                "| 正式分类 | 候选数 |",
+                "| --- | ---: |",
+                f"| 功率可行但 $q$ 下降 | {boundary_counts['功率可行但q下降']} |",
+                f"| $q$ 提高但功率不达标 | {boundary_counts['q提高但功率不达标']} |",
+                f"| 功率与 $q$ 均不占优 | {boundary_counts['功率与q均不占优']} |",
+                "",
+                "18 个合法单边界候选均完成中精度和正式精度评价；"
+                "未发现同时满足 $42\\ \\mathrm{MW}$ 功率约束并提高 $q$ 的候选，"
+                f"因此保留边界 $(1,5,11,14,20)$。B{most_sensitive} 是本次"
+                "单位面积输出局部检验中最敏感的边界。",
+            )
         )
     lines.extend(
         (

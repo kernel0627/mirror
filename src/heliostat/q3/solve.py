@@ -16,6 +16,7 @@ from .evaluate import (
     RefineEvaluation,
     dense_profile,
     evaluate_design,
+    evaluate_field,
     formal_profile,
     medium_profile,
     metrics,
@@ -23,13 +24,19 @@ from .evaluate import (
 )
 from .export import write_results
 from .model import RefineBaseline, RefineDesign, load_baseline
-from .plot import generate_figures
+from .plot import generate_figures, plot_boundary_sensitivity
 from .search import coordinate_search
 from .sensitivity import (
     active_from_formal,
+    BASE_BOUNDARIES,
+    boundary_perturbations,
+    group_indices_for_boundaries,
+    moved_mirror_count,
+    reassign_boundary_groups,
     select_formal_directions,
     specification_perturbations,
 )
+from .tower_modes import build_refine_field
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -219,7 +226,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 formal_count += 1
         return evaluation, None
 
-    print("阶段 0/5：六组正式初值回归", flush=True)
+    print("阶段 0/6：六组正式初值回归", flush=True)
     baseline_formal, reason = try_evaluate(
         baseline.design,
         profile_kind="formal",
@@ -244,7 +251,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         raise RuntimeError(f"六组中精度基准无法评价：{reason}")
 
     formal_rows: list[dict[str, object]] = []
-    print("阶段 1/5：塔位模式 A/B 独立扫描", flush=True)
+    print("阶段 1/6：塔位模式 A/B 独立扫描", flush=True)
     tower_internal: list[dict[str, object]] = []
     tower_rows: list[dict[str, object]] = []
     for mode in ("A", "B"):
@@ -345,7 +352,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         flush=True,
     )
 
-    print("阶段 2/5：D1、g 一维粗扫及 3×3 局部组合", flush=True)
+    print("阶段 2/6：D1、g 一维粗扫及 3×3 局部组合", flush=True)
     geometry_origin = current_design
     geometry_origin_formal = current_formal
     geometry_origin_medium, reason = try_evaluate(
@@ -461,7 +468,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         flush=True,
     )
 
-    print("阶段 3/5：18 个六区规格变量正负敏感性", flush=True)
+    print("阶段 3/6：18 个六区规格变量正负敏感性", flush=True)
     sensitivity_reference, reason = try_evaluate(
         current_design,
         profile_kind="medium",
@@ -552,7 +559,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     )
     print(f"正式确认的活跃变量：{active_variables or '无'}", flush=True)
 
-    print("阶段 4/5：活跃变量两轮分块回扫", flush=True)
+    print("阶段 4/6：活跃变量两轮分块回扫", flush=True)
     local_initial = sensitivity_reference
 
     def local_evaluator(design: RefineDesign) -> RefineEvaluation | None:
@@ -589,7 +596,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         }
     )
 
-    print("阶段 5/5：塔位包围扫描与正式精度最细邻域收口", flush=True)
+    print("阶段 5/6：塔位包围扫描与正式精度最细邻域收口", flush=True)
     preclosure_formal = attempted_formal
     closure_values: dict[RefineDesign, RefineEvaluation] = {
         search.best_design: attempted_formal,
@@ -705,6 +712,150 @@ def run(argv: Sequence[str] | None = None) -> int:
         selected_formal = baseline_formal
         decision = "微调候选未通过统一验收，保留原六组正式方案"
 
+    print("阶段 6/6：六区边界局部敏感性检验", flush=True)
+    boundary_field = build_refine_field(baseline, selected_design)
+    base_groups = group_indices_for_boundaries(
+        boundary_field.ring_indices,
+        BASE_BOUNDARIES,
+    )
+    if not np.array_equal(boundary_field.group_indices, base_groups):
+        raise RuntimeError("最终镜场分区与六区边界基准不一致。")
+    boundary_medium_cache = EvaluationCache()
+    boundary_formal_cache = EvaluationCache()
+    boundary_formal_baseline = evaluate_field(
+        baseline=baseline,
+        design=selected_design,
+        field=boundary_field,
+        profile=verification_profile,
+        cache=boundary_formal_cache,
+    )
+    if not args.smoke:
+        boundary_regression = (
+            abs(boundary_formal_baseline.total_area_m2 - selected_formal.total_area_m2)
+            <= 1e-6
+            and abs(
+                boundary_formal_baseline.annual_power_mw
+                - selected_formal.annual_power_mw
+            )
+            <= 1e-6
+            and abs(
+                boundary_formal_baseline.unit_area_power_kw_m2
+                - selected_formal.unit_area_power_kw_m2
+            )
+            <= 1e-9
+        )
+        if not boundary_regression:
+            raise RuntimeError("六区边界零扰动正式回归失败。")
+
+    boundary_rows: list[dict[str, object]] = []
+    for candidate in boundary_perturbations():
+        candidate_field = reassign_boundary_groups(
+            boundary_field,
+            candidate.boundaries,
+        )
+        groups = candidate_field.group_counts
+        row: dict[str, object] = {
+            "boundary_id": candidate.boundary_id,
+            "candidate": candidate.label,
+            "original_end_ring": candidate.original_end_ring,
+            "shift_rings": candidate.shift_rings,
+            "new_end_ring": candidate.new_end_ring,
+            "boundaries": "|".join(
+                str(value) for value in candidate.boundaries
+            ),
+            "moved_mirror_count": moved_mirror_count(
+                boundary_field,
+                candidate.boundaries,
+            ),
+            "group_counts": "|".join(str(value) for value in groups),
+        }
+        try:
+            medium = evaluate_field(
+                baseline=baseline,
+                design=selected_design,
+                field=candidate_field,
+                profile=search_profile,
+                cache=boundary_medium_cache,
+            )
+            formal = evaluate_field(
+                baseline=baseline,
+                design=selected_design,
+                field=candidate_field,
+                profile=verification_profile,
+                cache=boundary_formal_cache,
+            )
+        except ValueError as exc:
+            if not args.smoke:
+                raise
+            row.update(
+                {
+                    "total_area_m2": math.nan,
+                    "medium_power_mw": math.nan,
+                    "medium_q_kw_m2": math.nan,
+                    "formal_power_mw": math.nan,
+                    "formal_power_margin_mw": math.nan,
+                    "formal_q_kw_m2": math.nan,
+                    "formal_delta_power_mw": math.nan,
+                    "formal_delta_q_kw_m2": math.nan,
+                    "formal_feasible": False,
+                    "q_better_than_baseline": False,
+                    "classification": "smoke仅验证链路",
+                    "smoke_reject_reason": str(exc),
+                }
+            )
+            boundary_rows.append(row)
+            continue
+        formal_feasible = formal.is_feasible(args.target_power)
+        q_better = (
+            formal.unit_area_power_kw_m2
+            > boundary_formal_baseline.unit_area_power_kw_m2
+        )
+        if formal_feasible and q_better:
+            if not args.smoke:
+                raise RuntimeError(
+                    f"边界候选 {candidate.label} 同时满足功率约束并提高 q，"
+                    "当前最终方案需要重新审定。"
+                )
+            classification = "smoke仅验证链路"
+        elif formal_feasible:
+            classification = "功率可行但q下降"
+        elif q_better:
+            classification = "q提高但功率不达标"
+        else:
+            classification = "功率与q均不占优"
+        row.update(
+            {
+                "total_area_m2": formal.total_area_m2,
+                "medium_power_mw": medium.annual_power_mw,
+                "medium_q_kw_m2": medium.unit_area_power_kw_m2,
+                "formal_power_mw": formal.annual_power_mw,
+                "formal_power_margin_mw": (
+                    formal.annual_power_mw - args.target_power
+                ),
+                "formal_q_kw_m2": formal.unit_area_power_kw_m2,
+                "formal_delta_power_mw": (
+                    formal.annual_power_mw
+                    - boundary_formal_baseline.annual_power_mw
+                ),
+                "formal_delta_q_kw_m2": (
+                    formal.unit_area_power_kw_m2
+                    - boundary_formal_baseline.unit_area_power_kw_m2
+                ),
+                "formal_feasible": formal_feasible,
+                "q_better_than_baseline": q_better,
+                "classification": classification,
+            }
+        )
+        boundary_rows.append(row)
+    if args.smoke:
+        print("边界检验 smoke 链路完成：18 个候选均已评价。", flush=True)
+    else:
+        print(
+            "边界检验完成：18 个候选均已执行中精度和正式精度评价，"
+            "未发现可直接替换当前边界的可行改进。",
+            flush=True,
+        )
+
     active_payload = {
         "tower_mode_decision": tower_decision,
         "selected_tower_mode": current_design.tower_mode,
@@ -755,6 +906,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         decision=decision,
         closure_rows=closure.trace,
         closure_payload=active_payload["closure"],
+        boundary_rows=boundary_rows,
     )
     figures = generate_figures(
         sensitivity_rows=sensitivity_rows,
@@ -771,6 +923,10 @@ def run(argv: Sequence[str] | None = None) -> int:
     )
     for index, path in enumerate(figures, start=16):
         written[f"figure_{index}"] = path
+    written["boundary_figure"] = plot_boundary_sensitivity(
+        boundary_rows,
+        output_dir=args.output,
+    )
 
     print("\n六区参数微调结果", flush=True)
     print(f"判定：{decision}", flush=True)
