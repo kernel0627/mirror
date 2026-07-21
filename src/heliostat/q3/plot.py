@@ -1,4 +1,4 @@
-"""补充方案要求的三张结果图。"""
+"""第三问敏感性、规格、指标和最终镜场结果图。"""
 
 from __future__ import annotations
 
@@ -8,19 +8,40 @@ from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Circle, Patch
 
 from .evaluate import RefineEvaluation
 from .model import RefineBaseline, RefineDesign
 
 
 def configure_matplotlib() -> None:
-    font_path = Path("/System/Library/Fonts/STHeiti Medium.ttc")
-    if font_path.exists():
+    font_candidates = (
+        Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+        Path("/System/Library/Fonts/PingFang.ttc"),
+        Path("C:/Windows/Fonts/msyh.ttc"),
+        Path("C:/Windows/Fonts/simhei.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+    )
+    for font_path in font_candidates:
+        if not font_path.exists():
+            continue
         matplotlib.font_manager.fontManager.addfont(font_path)
-        font_name = matplotlib.font_manager.FontProperties(fname=font_path).get_name()
+        font_name = matplotlib.font_manager.FontProperties(
+            fname=font_path
+        ).get_name()
         plt.rcParams["font.family"] = font_name
+        break
     plt.rcParams.update(
         {
+            "font.sans-serif": [
+                "PingFang SC",
+                "Microsoft YaHei",
+                "SimHei",
+                "Noto Sans CJK SC",
+                "WenQuanYi Zen Hei",
+                "DejaVu Sans",
+            ],
             "axes.unicode_minus": False,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
@@ -39,9 +60,13 @@ def plot_sensitivity(
     output_dir: str | Path,
 ) -> Path:
     records = [
-        (f"{row['parameter']}{row['direction']}", float(row["delta_q"]))
+        (
+            "六区规格",
+            f"{row['parameter']}{row['direction']}",
+            float(row["delta_q_from_geometry"]),
+        )
         for row in rows
-        if row.get("delta_q") not in (None, "")
+        if row.get("delta_q_from_geometry") not in (None, "")
     ]
     for row in tower_rows:
         if (
@@ -50,30 +75,61 @@ def plot_sensitivity(
             and row.get("delta_q_from_six_medium") not in (None, "")
         ):
             direction = "+" if float(row["delta_y_m"]) > 0 else "-"
-            records.append((f"yT{direction}", float(row["delta_q_from_six_medium"])))
+            records.append(
+                (
+                    "塔位",
+                    f"yT{direction}",
+                    float(row["delta_q_from_six_medium"]),
+                )
+            )
     for row in geometry_rows:
-        if row.get("delta_q_from_six_medium") in (None, ""):
+        if row.get("delta_q_from_tower_medium") in (None, ""):
             continue
         if row.get("scan") == "D1-one-dimensional" and math.isclose(
             abs(float(row["delta_D1_from_six"])), 0.10, abs_tol=1e-12
         ):
             direction = "+" if float(row["delta_D1_from_six"]) > 0 else "-"
-            records.append((f"D1{direction}", float(row["delta_q_from_six_medium"])))
+            records.append(
+                (
+                    "Campo",
+                    f"D1{direction}",
+                    float(row["delta_q_from_tower_medium"]),
+                )
+            )
         if row.get("scan") == "g-one-dimensional" and math.isclose(
             abs(float(row["delta_g_from_six"])), 0.01, abs_tol=1e-12
         ):
             direction = "+" if float(row["delta_g_from_six"]) > 0 else "-"
-            records.append((f"g{direction}", float(row["delta_q_from_six_medium"])))
-    records.sort(key=lambda item: item[1])
-    labels = [item[0] for item in records]
-    values = [item[1] for item in records]
+            records.append(
+                (
+                    "Campo",
+                    f"g{direction}",
+                    float(row["delta_q_from_tower_medium"]),
+                )
+            )
+    stage_order = {"塔位": 0, "Campo": 1, "六区规格": 2}
+    records.sort(key=lambda item: (stage_order[item[0]], item[2]))
+    labels = [f"{item[0]} · {item[1]}" for item in records]
+    values = [item[2] for item in records]
+    stage_colors = {
+        "塔位": "#7570b3",
+        "Campo": "#d95f02",
+        "六区规格": "#1b9e77",
+    }
     figure, axis = plt.subplots(figsize=(9, max(5, 0.22 * len(records))))
-    colors = ["#d95f02" if value < 0 else "#1b9e77" for value in values]
+    colors = [stage_colors[item[0]] for item in records]
     axis.barh(np.arange(len(values)), values, color=colors)
     axis.set_yticks(np.arange(len(values)), labels)
     axis.axvline(0.0, color="black", linewidth=0.8)
-    axis.set_xlabel("相对原六组中精度基准的 Δq / (kW/m²)")
-    axis.set_title("图 S3-1 塔位、Campo 与六区规格参数敏感性排序")
+    axis.set_xlabel("相对于对应阶段基准的 Δq / (kW/m²)")
+    axis.set_title("图 S3-1 各阶段候选相对于对应阶段基准的单位面积输出变化")
+    axis.legend(
+        handles=[
+            Patch(color=color, label=stage)
+            for stage, color in stage_colors.items()
+        ],
+        loc="best",
+    )
     axis.grid(axis="x", alpha=0.25)
     figure.tight_layout()
     path = Path(output_dir) / "16_参数敏感性图.png"
@@ -157,7 +213,93 @@ def plot_metric_comparison(
     return path
 
 
-def generate_figures(**kwargs: object) -> tuple[Path, Path, Path]:
+def plot_final_field(
+    *,
+    baseline: RefineBaseline,
+    selected: RefineDesign,
+    evaluation: RefineEvaluation,
+    output_dir: str | Path,
+) -> Path:
+    figure, axis = plt.subplots(figsize=(8.2, 8.2))
+    colors = ("#2166AC", "#67A9CF", "#D1E5F0", "#FDDBC7", "#EF8A62", "#B2182B")
+    for group, color in enumerate(colors):
+        active = evaluation.field.group_indices == group
+        axis.scatter(
+            evaluation.field.coordinates[active, 0],
+            evaluation.field.coordinates[active, 1],
+            s=5,
+            color=color,
+            alpha=0.78,
+            label=f"G{group + 1}",
+            rasterized=True,
+        )
+    axis.add_patch(
+        Circle(
+            (0.0, 0.0),
+            baseline.parameters.field_radius,
+            fill=False,
+            color="#475569",
+            linewidth=1.2,
+            label="350 m 场地边界",
+        )
+    )
+    axis.add_patch(
+        Circle(
+            (baseline.parameters.tower_x, selected.tower_y),
+            baseline.parameters.exclusion_radius,
+            fill=False,
+            color="#F59E0B",
+            linestyle="--",
+            linewidth=1.2,
+            label="最终塔周 100 m 禁区",
+        )
+    )
+    axis.scatter(
+        (baseline.parameters.tower_x,),
+        (baseline.design.tower_y,),
+        marker="x",
+        s=90,
+        linewidths=2.0,
+        color="#111827",
+        label="原塔位",
+        zorder=5,
+    )
+    axis.scatter(
+        (baseline.parameters.tower_x,),
+        (selected.tower_y,),
+        marker="*",
+        s=145,
+        color="#DC2626",
+        edgecolors="white",
+        linewidths=0.7,
+        label="最终塔位",
+        zorder=6,
+    )
+    displacement = selected.tower_y - baseline.design.tower_y
+    axis.annotate(
+        f"向北移动 {displacement:.1f} m",
+        xy=(baseline.parameters.tower_x, selected.tower_y),
+        xytext=(30.0, baseline.design.tower_y - 18.0),
+        arrowprops={"arrowstyle": "->", "color": "#DC2626"},
+        color="#991B1B",
+        fontsize=10,
+    )
+    axis.set_aspect("equal", adjustable="box")
+    axis.set_xlim(-365.0, 365.0)
+    axis.set_ylim(-365.0, 365.0)
+    axis.set_xlabel("东西坐标 x / m")
+    axis.set_ylabel("南北坐标 y / m")
+    axis.set_title("图 3-1 最终六区镜场、场地边界与塔位变化")
+    axis.grid(alpha=0.2)
+    axis.legend(loc="upper right", ncol=2, fontsize=8)
+    figure.tight_layout()
+    path = Path(output_dir) / "19_最终六区镜场与塔位平面图.png"
+    figure.savefig(path, dpi=240)
+    plt.close(figure)
+    return path
+
+
+def generate_figures(**kwargs: object) -> tuple[Path, Path, Path, Path]:
     configure_matplotlib()
     return (
         plot_sensitivity(
@@ -172,6 +314,12 @@ def generate_figures(**kwargs: object) -> tuple[Path, Path, Path]:
             baseline_formal=kwargs["baseline_formal"],
             candidate_formal=kwargs["candidate_formal"],
             dense_payload=kwargs["dense_payload"],
+            output_dir=kwargs["output_dir"],
+        ),
+        plot_final_field(
+            baseline=kwargs["baseline"],
+            selected=kwargs["selected_design"],
+            evaluation=kwargs["selected_formal"],
             output_dir=kwargs["output_dir"],
         ),
     )

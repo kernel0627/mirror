@@ -28,6 +28,7 @@ SOURCE_PATHS = (
     "src/heliostat/q3/evaluate.py",
     "src/heliostat/q3/sensitivity.py",
     "src/heliostat/q3/search.py",
+    "src/heliostat/q3/closure.py",
     "src/heliostat/q3/export.py",
     "src/heliostat/q3/plot.py",
     "src/heliostat/q3/solve.py",
@@ -52,9 +53,19 @@ class _BundleTransformer(ast.NodeTransformer):
     def visit_ImportFrom(
         self,
         node: ast.ImportFrom,
-    ) -> ast.ImportFrom | None:
-        if node.module == "__future__" or node.level > 0:
+    ) -> ast.ImportFrom | ast.Assign | list[ast.Assign] | None:
+        if node.module == "__future__":
             return None
+        if node.level > 0:
+            aliases = [
+                ast.Assign(
+                    targets=[ast.Name(id=item.asname, ctx=ast.Store())],
+                    value=ast.Name(id=item.name, ctx=ast.Load()),
+                )
+                for item in node.names
+                if item.asname is not None
+            ]
+            return aliases or None
         return node
 
     def visit_If(self, node: ast.If) -> ast.If | None:

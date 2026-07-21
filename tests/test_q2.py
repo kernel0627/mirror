@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -189,6 +191,76 @@ class Question2EvaluationTests(unittest.TestCase):
                 float(result.best.coordinates[0, 0]),
             )
             workbook.close()
+
+
+class Question2DeliverableTests(unittest.TestCase):
+    def test_result2_uses_required_name_and_matches_template_and_csv(self) -> None:
+        output = Path("outputs/q2/result2.xlsx")
+        self.assertTrue(output.is_file())
+        self.assertFalse(Path("outputs/q2/10_第二问提交结果.xlsx").exists())
+
+        template = load_workbook(
+            "task/A/result2.xlsx",
+            read_only=True,
+            data_only=True,
+        )
+        workbook = load_workbook(output, read_only=True, data_only=True)
+        self.assertEqual(workbook.sheetnames, template.sheetnames)
+        sheet = workbook.active
+        template_sheet = template.active
+        self.assertEqual(sheet.title, template_sheet.title)
+        self.assertEqual(sheet.max_column, 8)
+        self.assertEqual(
+            [sheet.cell(1, column).value for column in range(1, 9)],
+            [template_sheet.cell(1, column).value for column in range(1, 9)],
+        )
+
+        with Path("outputs/q2/03_最终镜位坐标.csv").open(
+            encoding="utf-8-sig",
+            newline="",
+        ) as handle:
+            rows = list(csv.DictReader(handle))
+        summary = json.loads(
+            Path("outputs/q2/07_最终方案摘要.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        parameters = summary["parameters"]
+        self.assertEqual(len(rows), summary["mirror_count"])
+        self.assertEqual(sheet.max_row, len(rows) + 1)
+        workbook_rows = list(
+            sheet.iter_rows(min_row=2, max_col=8, values_only=True)
+        )
+        self.assertEqual(len(workbook_rows), len(rows))
+        for index, (row, workbook_row) in enumerate(
+            zip(rows, workbook_rows),
+            start=1,
+        ):
+            self.assertEqual(workbook_row[0], parameters["tower_x"])
+            self.assertEqual(workbook_row[1], parameters["tower_y"])
+            self.assertEqual(workbook_row[2], index)
+            self.assertAlmostEqual(
+                workbook_row[3],
+                float(row["mirror_width_m"]),
+            )
+            self.assertAlmostEqual(
+                workbook_row[4],
+                float(row["mirror_height_m"]),
+            )
+            self.assertAlmostEqual(
+                workbook_row[5],
+                float(row["x_m"]),
+            )
+            self.assertAlmostEqual(
+                workbook_row[6],
+                float(row["y_m"]),
+            )
+            self.assertAlmostEqual(
+                workbook_row[7],
+                float(row["z_m"]),
+            )
+        workbook.close()
+        template.close()
 
 
 if __name__ == "__main__":

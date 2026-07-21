@@ -1653,6 +1653,12 @@ def build_refine_field(baseline: RefineBaseline, design: RefineDesign) -> Refine
 
 """统一几何预检、四级精度和六区候选评价。"""
 from dataclasses import asdict, dataclass, replace
+_coarse_profile = coarse_profile
+_dense_profile = dense_profile
+_evaluate_specifications = evaluate_specifications
+_formal_profile = formal_profile
+_medium_profile = medium_profile
+_smoke_profile = smoke_profile
 
 @dataclass(frozen=True)
 class RefineEvaluation:
@@ -1858,10 +1864,116 @@ def coordinate_search(*, initial_design: RefineDesign, initial_evaluation: Refin
     return SearchOutcome(initial_design=initial_design, initial_evaluation=initial_evaluation, best_design=current_design, best_evaluation=current_evaluation, trace=tuple(trace), evaluated_candidates=evaluated)
 
 # ========================================================================
+# 来源：src/heliostat/q3/closure.py
+# ========================================================================
+
+"""最终候选的塔位包围扫描和正式精度最细邻域收口。"""
+from dataclasses import dataclass
+from typing import Callable
+Evaluator = Callable[[RefineDesign], RefineEvaluation | None]
+LOCAL_STEPS = (('tower_y', 0.1), ('initial_spacing', 0.05), ('spacing_growth', 0.005), ('w1', 0.02), ('h1', 0.02), ('H2', 0.02))
+
+@dataclass(frozen=True)
+class ClosureOutcome:
+    initial_design: RefineDesign
+    initial_evaluation: RefineEvaluation
+    best_design: RefineDesign
+    best_evaluation: RefineEvaluation
+    trace: tuple[dict[str, object], ...]
+    tower_bracketed: bool
+    local_converged: bool
+    local_sweeps: int
+
+def _score(evaluation: RefineEvaluation, target_power_mw: float) -> tuple[int, float]:
+    feasible = evaluation.is_feasible(target_power_mw)
+    return (int(feasible), evaluation.unit_area_power_kw_m2 if feasible else evaluation.annual_power_mw)
+
+def _better(candidate: RefineEvaluation, reference: RefineEvaluation, *, target_power_mw: float, threshold: float) -> bool:
+    if candidate.is_feasible(target_power_mw) != reference.is_feasible(target_power_mw):
+        return candidate.is_feasible(target_power_mw)
+    if candidate.is_feasible(target_power_mw):
+        return candidate.unit_area_power_kw_m2 > reference.unit_area_power_kw_m2 + threshold
+    return candidate.annual_power_mw > reference.annual_power_mw + 1e-06
+
+def _record(*, phase: str, sweep: int, parameter: str, old_value: float, new_value: float, design: RefineDesign, evaluation: RefineEvaluation | None, target_power_mw: float) -> dict[str, object]:
+    row: dict[str, object] = {'phase': phase, 'sweep': sweep, 'parameter': parameter, 'old_value': old_value, 'new_value': new_value, 'step': new_value - old_value, 'tower_y': design.tower_y, 'initial_spacing': design.initial_spacing, 'spacing_growth': design.spacing_growth, 'w1': design.widths[0], 'h1': design.mirror_heights[0], 'H2': design.installation_heights[1], 'legal': evaluation is not None, 'feasible': False, 'annual_power_mw': None, 'unit_area_power_kw_m2': None, 'accepted': False, 'stage_selected': False}
+    if evaluation is not None:
+        row.update({'feasible': evaluation.is_feasible(target_power_mw), 'annual_power_mw': evaluation.annual_power_mw, 'unit_area_power_kw_m2': evaluation.unit_area_power_kw_m2})
+    return row
+
+def close_formal_neighborhood(*, initial_design: RefineDesign, initial_evaluation: RefineEvaluation, evaluator: Evaluator, target_power_mw: float=42.0, coarse_step_limit: int=12, fine_radius_steps: int=4, maximum_local_sweeps: int=4, move_q_threshold: float=1e-08) -> ClosureOutcome:
+    """先包围塔位极值，再对六个活跃变量做正式精度双侧检查。"""
+    if coarse_step_limit < 1:
+        raise ValueError('塔位包围扫描至少需要一个 0.5 m 步长。')
+    if fine_radius_steps < 1:
+        raise ValueError('塔位细扫至少需要中心两侧各一个 0.1 m 点。')
+    if maximum_local_sweeps < 0:
+        raise ValueError('最细邻域回扫轮数不能为负。')
+    trace: list[dict[str, object]] = []
+    coarse: list[tuple[RefineDesign, RefineEvaluation, dict[str, object] | None]] = [(initial_design, initial_evaluation, None)]
+    previous = initial_evaluation
+    tower_bracketed = False
+    for index in range(1, coarse_step_limit + 1):
+        candidate = initial_design.with_parameter('tower_y', initial_design.tower_y + 0.5 * index)
+        evaluation = evaluator(candidate)
+        row = _record(phase='tower_coarse', sweep=0, parameter='tower_y', old_value=initial_design.tower_y, new_value=candidate.tower_y, design=candidate, evaluation=evaluation, target_power_mw=target_power_mw)
+        trace.append(row)
+        if evaluation is None:
+            tower_bracketed = True
+            break
+        coarse.append((candidate, evaluation, row))
+        if previous.is_feasible(target_power_mw) and evaluation.is_feasible(target_power_mw) and (evaluation.unit_area_power_kw_m2 < previous.unit_area_power_kw_m2):
+            tower_bracketed = True
+            break
+        previous = evaluation
+    coarse_best = max(coarse, key=lambda item: _score(item[1], target_power_mw))
+    if coarse_best[2] is not None:
+        coarse_best[2]['stage_selected'] = True
+    fine: list[tuple[RefineDesign, RefineEvaluation, dict[str, object]]] = []
+    center_y = coarse_best[0].tower_y
+    for offset in range(-fine_radius_steps, fine_radius_steps + 1):
+        candidate = coarse_best[0].with_parameter('tower_y', center_y + 0.1 * offset)
+        evaluation = evaluator(candidate)
+        row = _record(phase='tower_fine', sweep=0, parameter='tower_y', old_value=center_y, new_value=candidate.tower_y, design=candidate, evaluation=evaluation, target_power_mw=target_power_mw)
+        trace.append(row)
+        if evaluation is not None:
+            fine.append((candidate, evaluation, row))
+    fine_best = max(fine, key=lambda item: _score(item[1], target_power_mw))
+    fine_best[2]['stage_selected'] = True
+    current_design = fine_best[0]
+    current_evaluation = fine_best[1]
+    local_converged = maximum_local_sweeps == 0
+    completed_sweeps = 0
+    for sweep in range(1, maximum_local_sweeps + 1):
+        completed_sweeps = sweep
+        sweep_improved = False
+        for (parameter, step) in LOCAL_STEPS:
+            old_value = current_design.parameter(parameter)
+            candidates: list[tuple[RefineDesign, RefineEvaluation, dict[str, object]]] = []
+            for sign in (-1.0, 1.0):
+                candidate = current_design.with_parameter(parameter, old_value + sign * step)
+                evaluation = evaluator(candidate)
+                row = _record(phase='local_fine', sweep=sweep, parameter=parameter, old_value=old_value, new_value=candidate.parameter(parameter), design=candidate, evaluation=evaluation, target_power_mw=target_power_mw)
+                trace.append(row)
+                if evaluation is not None:
+                    candidates.append((candidate, evaluation, row))
+            improving = [item for item in candidates if _better(item[1], current_evaluation, target_power_mw=target_power_mw, threshold=move_q_threshold)]
+            if improving:
+                best = max(improving, key=lambda item: _score(item[1], target_power_mw))
+                best[2]['accepted'] = True
+                current_design = best[0]
+                current_evaluation = best[1]
+                sweep_improved = True
+        if not sweep_improved:
+            local_converged = True
+            break
+    return ClosureOutcome(initial_design=initial_design, initial_evaluation=initial_evaluation, best_design=current_design, best_evaluation=current_evaluation, trace=tuple(trace), tower_bracketed=tower_bracketed, local_converged=local_converged, local_sweeps=completed_sweeps)
+
+# ========================================================================
 # 来源：src/heliostat/q3/export.py
 # ========================================================================
 
-"""六区微调实验的 01--14 号数据与提交表导出。"""
+"""六区微调实验的数据、论文表和 result3.xlsx 导出。"""
 import csv
 import json
 from dataclasses import asdict
@@ -1883,7 +1995,7 @@ def _csv(path: Path, rows: Iterable[dict[str, object]]) -> Path:
             if key not in fields:
                 fields.append(key)
     with path.open('w', encoding='utf-8-sig', newline='') as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator='\n')
         writer.writeheader()
         writer.writerows(records)
     return path
@@ -1891,7 +2003,7 @@ def _csv(path: Path, rows: Iterable[dict[str, object]]) -> Path:
 def _comparison_record(label: str, evaluation: RefineEvaluation, *, target_power_mw: float) -> dict[str, object]:
     return {'scheme': label, **metrics(evaluation, target_power_mw=target_power_mw)}
 
-def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regression: dict[str, object], tower_rows: list[dict[str, object]], geometry_rows: list[dict[str, object]], sensitivity_rows: list[dict[str, object]], active_payload: dict[str, object], search_trace: Iterable[dict[str, object]], formal_rows: list[dict[str, object]], baseline_formal: RefineEvaluation, attempted_formal: RefineEvaluation, selected_formal: RefineEvaluation, selected_design: RefineDesign, dense_payload: dict[str, object], result3_template: str | Path, target_power_mw: float, decision: str) -> dict[str, Path]:
+def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regression: dict[str, object], tower_rows: list[dict[str, object]], geometry_rows: list[dict[str, object]], sensitivity_rows: list[dict[str, object]], active_payload: dict[str, object], search_trace: Iterable[dict[str, object]], formal_rows: list[dict[str, object]], baseline_formal: RefineEvaluation, preclosure_formal: RefineEvaluation, attempted_formal: RefineEvaluation, selected_formal: RefineEvaluation, selected_design: RefineDesign, dense_payload: dict[str, object], result3_template: str | Path, target_power_mw: float, decision: str, closure_rows: Iterable[dict[str, object]], closure_payload: dict[str, object]) -> dict[str, Path]:
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
@@ -1911,15 +2023,16 @@ def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regressio
     for index in range(selected_formal.mirror_count):
         mirror_rows.append({'mirror_id': index + 1, 'original_mirror_id': int(selected_formal.field.original_indices[index]) + 1, 'ring_index': int(selected_formal.field.ring_indices[index]), 'group': int(selected_formal.field.group_indices[index]) + 1, 'mirror_width_m': float(selected_formal.specifications.widths[index]), 'mirror_height_m': float(selected_formal.specifications.heights[index]), 'x_m': float(selected_formal.field.coordinates[index, 0]), 'y_m': float(selected_formal.field.coordinates[index, 1]), 'z_m': float(selected_formal.specifications.installation_heights[index])})
     paths['mirrors'] = _csv(destination / '10_最终逐镜参数与坐标.csv', mirror_rows)
-    comparison = {'decision': decision, 'target_power_mw': target_power_mw, 'baseline': _comparison_record('six_group_baseline', baseline_formal, target_power_mw=target_power_mw), 'attempted_candidate': _comparison_record('refined_candidate', attempted_formal, target_power_mw=target_power_mw), 'selected': _comparison_record('selected_final', selected_formal, target_power_mw=target_power_mw), 'selected_design': selected_design.to_dict()}
+    comparison = {'decision': decision, 'target_power_mw': target_power_mw, 'baseline': _comparison_record('six_group_baseline', baseline_formal, target_power_mw=target_power_mw), 'preclosure_candidate': _comparison_record('two_sweep_candidate', preclosure_formal, target_power_mw=target_power_mw), 'attempted_candidate': _comparison_record('refined_candidate', attempted_formal, target_power_mw=target_power_mw), 'selected': _comparison_record('selected_final', selected_formal, target_power_mw=target_power_mw), 'selected_design': selected_design.to_dict(), 'closure': closure_payload}
     paths['formal'] = _json(destination / '11_正式结果比较.json', comparison)
     paths['dense'] = _json(destination / '12_加密验收比较.json', dense_payload)
     paths['geometry'] = _json(destination / '13_几何约束验证.json', {'valid': selected_formal.geometry.valid, 'details': asdict(selected_formal.geometry), 'mirror_set_hash': selected_formal.field.mirror_set_hash, 'outer_clipped_count': selected_formal.field.outer_clipped_count, 'group_counts': list(selected_formal.field.group_counts)})
-    workbook = destination / '14_第三问最终提交结果.xlsx'
+    paths['closure'] = _csv(destination / '14_局部收口检查.csv', closure_rows)
+    workbook = destination / 'result3.xlsx'
     write_result3_workbook(template_path=result3_template, output_path=workbook, evaluation=selected_formal.raw, tower_x=baseline.parameters.tower_x, tower_y=selected_design.tower_y)
     paths['workbook'] = workbook
     delta_q = attempted_formal.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2
-    lines = ['# 第三问六区参数微调结果与验证表', '', f'最终判定：{decision}。', '', '## 表 S3-1 正式精度比较', '', '| 方案 | 镜子数 | 年平均功率 (MW) | 功率余量 (MW) | 总面积 (m²) | 单位面积输出 (kW/m²) |', '| --- | ---: | ---: | ---: | ---: | ---: |', f'| 原六组 | {baseline_formal.mirror_count} | {baseline_formal.annual_power_mw:.9f} | {baseline_formal.annual_power_mw - target_power_mw:.9f} | {baseline_formal.total_area_m2:.6f} | {baseline_formal.unit_area_power_kw_m2:.9f} |', f'| 微调候选 | {attempted_formal.mirror_count} | {attempted_formal.annual_power_mw:.9f} | {attempted_formal.annual_power_mw - target_power_mw:.9f} | {attempted_formal.total_area_m2:.6f} | {attempted_formal.unit_area_power_kw_m2:.9f} |', '', f'正式精度候选相对原六组的 $\\Delta q={delta_q:.9f}\\ \\mathrm{{kW/m^2}}$。', '', '## 表 S3-2 加密精度比较', '', '| 邻镜半径 (m) | 原六组功率 (MW) | 微调候选功率 (MW) | 原六组 q (kW/m²) | 微调候选 q (kW/m²) | $\\Delta q$ (kW/m²) |', '| ---: | ---: | ---: | ---: | ---: | ---: |']
+    lines = ['# 第三问六区参数微调结果与验证表', '', f'最终判定：{decision}。', '', '## 表 S3-1 正式精度比较', '', '| 方案 | 镜子数 | 年平均功率 (MW) | 功率余量 (MW) | 总面积 (m²) | 单位面积输出 (kW/m²) |', '| --- | ---: | ---: | ---: | ---: | ---: |', f'| 原六组 | {baseline_formal.mirror_count} | {baseline_formal.annual_power_mw:.9f} | {baseline_formal.annual_power_mw - target_power_mw:.9f} | {baseline_formal.total_area_m2:.6f} | {baseline_formal.unit_area_power_kw_m2:.9f} |', f'| 两轮局部搜索候选 | {preclosure_formal.mirror_count} | {preclosure_formal.annual_power_mw:.9f} | {preclosure_formal.annual_power_mw - target_power_mw:.9f} | {preclosure_formal.total_area_m2:.6f} | {preclosure_formal.unit_area_power_kw_m2:.9f} |', f'| 正式收口候选 | {attempted_formal.mirror_count} | {attempted_formal.annual_power_mw:.9f} | {attempted_formal.annual_power_mw - target_power_mw:.9f} | {attempted_formal.total_area_m2:.6f} | {attempted_formal.unit_area_power_kw_m2:.9f} |', '', f'正式精度候选相对原六组的 $\\Delta q={delta_q:.9f}\\ \\mathrm{{kW/m^2}}$。', '', f"塔位包围扫描已找到北侧下降点；随后完成一次六个活跃变量的正负最细邻域检查，并接受 {closure_payload['accepted_moves']} 个可行改进。", '', '## 表 S3-2 加密精度比较', '', '| 邻镜半径 (m) | 原六组功率 (MW) | 微调候选功率 (MW) | 原六组 q (kW/m²) | 微调候选 q (kW/m²) | $\\Delta q$ (kW/m²) |', '| ---: | ---: | ---: | ---: | ---: | ---: |']
     for radius in ('80', '100'):
         before = dense_payload.get('baseline', {}).get(radius)
         after = dense_payload.get('candidate', {}).get(radius)
@@ -1930,7 +2043,7 @@ def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regressio
         lines.append(f"| G{row['group']} | {row['mirror_count']} | {row['mirror_width_m']:.6f} | {row['mirror_height_m']:.6f} | {row['installation_height_m']:.6f} |")
     lines.extend(('', '## 验收说明', '', '塔位模式 A 与 B 分开扫描；搜索轨迹固定使用已选模式。中精度仅用于排序和局部接受，最终判定来自同口径正式精度及 80/100 m 加密比较。', ''))
     table = destination / '15_论文结果与验证表.md'
-    table.write_text('\n'.join(lines), encoding='utf-8')
+    table.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     paths['table'] = table
     return paths
 
@@ -1938,46 +2051,53 @@ def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regressio
 # 来源：src/heliostat/q3/plot.py
 # ========================================================================
 
-"""补充方案要求的三张结果图。"""
+"""第三问敏感性、规格、指标和最终镜场结果图。"""
 import math
 from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Circle, Patch
 
 def configure_matplotlib() -> None:
-    font_path = Path('/System/Library/Fonts/STHeiti Medium.ttc')
-    if font_path.exists():
+    font_candidates = (Path('/System/Library/Fonts/STHeiti Medium.ttc'), Path('/System/Library/Fonts/PingFang.ttc'), Path('C:/Windows/Fonts/msyh.ttc'), Path('C:/Windows/Fonts/simhei.ttf'), Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'), Path('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'))
+    for font_path in font_candidates:
+        if not font_path.exists():
+            continue
         matplotlib.font_manager.fontManager.addfont(font_path)
         font_name = matplotlib.font_manager.FontProperties(fname=font_path).get_name()
         plt.rcParams['font.family'] = font_name
-    plt.rcParams.update({'axes.unicode_minus': False, 'figure.facecolor': 'white', 'axes.facecolor': 'white', 'savefig.facecolor': 'white', 'savefig.bbox': 'tight'})
+        break
+    plt.rcParams.update({'font.sans-serif': ['PingFang SC', 'Microsoft YaHei', 'SimHei', 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', 'DejaVu Sans'], 'axes.unicode_minus': False, 'figure.facecolor': 'white', 'axes.facecolor': 'white', 'savefig.facecolor': 'white', 'savefig.bbox': 'tight'})
 
 def plot_sensitivity(rows: list[dict[str, object]], *, tower_rows: list[dict[str, object]], geometry_rows: list[dict[str, object]], selected_tower_mode: str, output_dir: str | Path) -> Path:
-    records = [(f"{row['parameter']}{row['direction']}", float(row['delta_q'])) for row in rows if row.get('delta_q') not in (None, '')]
+    records = [('六区规格', f"{row['parameter']}{row['direction']}", float(row['delta_q_from_geometry'])) for row in rows if row.get('delta_q_from_geometry') not in (None, '')]
     for row in tower_rows:
         if row.get('tower_mode') == selected_tower_mode and abs(float(row.get('delta_y_m', 99.0))) == 0.5 and (row.get('delta_q_from_six_medium') not in (None, '')):
             direction = '+' if float(row['delta_y_m']) > 0 else '-'
-            records.append((f'yT{direction}', float(row['delta_q_from_six_medium'])))
+            records.append(('塔位', f'yT{direction}', float(row['delta_q_from_six_medium'])))
     for row in geometry_rows:
-        if row.get('delta_q_from_six_medium') in (None, ''):
+        if row.get('delta_q_from_tower_medium') in (None, ''):
             continue
         if row.get('scan') == 'D1-one-dimensional' and math.isclose(abs(float(row['delta_D1_from_six'])), 0.1, abs_tol=1e-12):
             direction = '+' if float(row['delta_D1_from_six']) > 0 else '-'
-            records.append((f'D1{direction}', float(row['delta_q_from_six_medium'])))
+            records.append(('Campo', f'D1{direction}', float(row['delta_q_from_tower_medium'])))
         if row.get('scan') == 'g-one-dimensional' and math.isclose(abs(float(row['delta_g_from_six'])), 0.01, abs_tol=1e-12):
             direction = '+' if float(row['delta_g_from_six']) > 0 else '-'
-            records.append((f'g{direction}', float(row['delta_q_from_six_medium'])))
-    records.sort(key=lambda item: item[1])
-    labels = [item[0] for item in records]
-    values = [item[1] for item in records]
+            records.append(('Campo', f'g{direction}', float(row['delta_q_from_tower_medium'])))
+    stage_order = {'塔位': 0, 'Campo': 1, '六区规格': 2}
+    records.sort(key=lambda item: (stage_order[item[0]], item[2]))
+    labels = [f'{item[0]} · {item[1]}' for item in records]
+    values = [item[2] for item in records]
+    stage_colors = {'塔位': '#7570b3', 'Campo': '#d95f02', '六区规格': '#1b9e77'}
     (figure, axis) = plt.subplots(figsize=(9, max(5, 0.22 * len(records))))
-    colors = ['#d95f02' if value < 0 else '#1b9e77' for value in values]
+    colors = [stage_colors[item[0]] for item in records]
     axis.barh(np.arange(len(values)), values, color=colors)
     axis.set_yticks(np.arange(len(values)), labels)
     axis.axvline(0.0, color='black', linewidth=0.8)
-    axis.set_xlabel('相对原六组中精度基准的 Δq / (kW/m²)')
-    axis.set_title('图 S3-1 塔位、Campo 与六区规格参数敏感性排序')
+    axis.set_xlabel('相对于对应阶段基准的 Δq / (kW/m²)')
+    axis.set_title('图 S3-1 各阶段候选相对于对应阶段基准的单位面积输出变化')
+    axis.legend(handles=[Patch(color=color, label=stage) for (stage, color) in stage_colors.items()], loc='best')
     axis.grid(axis='x', alpha=0.25)
     figure.tight_layout()
     path = Path(output_dir) / '16_参数敏感性图.png'
@@ -2032,9 +2152,35 @@ def plot_metric_comparison(*, baseline_formal: RefineEvaluation, candidate_forma
     plt.close(figure)
     return path
 
-def generate_figures(**kwargs: object) -> tuple[Path, Path, Path]:
+def plot_final_field(*, baseline: RefineBaseline, selected: RefineDesign, evaluation: RefineEvaluation, output_dir: str | Path) -> Path:
+    (figure, axis) = plt.subplots(figsize=(8.2, 8.2))
+    colors = ('#2166AC', '#67A9CF', '#D1E5F0', '#FDDBC7', '#EF8A62', '#B2182B')
+    for (group, color) in enumerate(colors):
+        active = evaluation.field.group_indices == group
+        axis.scatter(evaluation.field.coordinates[active, 0], evaluation.field.coordinates[active, 1], s=5, color=color, alpha=0.78, label=f'G{group + 1}', rasterized=True)
+    axis.add_patch(Circle((0.0, 0.0), baseline.parameters.field_radius, fill=False, color='#475569', linewidth=1.2, label='350 m 场地边界'))
+    axis.add_patch(Circle((baseline.parameters.tower_x, selected.tower_y), baseline.parameters.exclusion_radius, fill=False, color='#F59E0B', linestyle='--', linewidth=1.2, label='最终塔周 100 m 禁区'))
+    axis.scatter((baseline.parameters.tower_x,), (baseline.design.tower_y,), marker='x', s=90, linewidths=2.0, color='#111827', label='原塔位', zorder=5)
+    axis.scatter((baseline.parameters.tower_x,), (selected.tower_y,), marker='*', s=145, color='#DC2626', edgecolors='white', linewidths=0.7, label='最终塔位', zorder=6)
+    displacement = selected.tower_y - baseline.design.tower_y
+    axis.annotate(f'向北移动 {displacement:.1f} m', xy=(baseline.parameters.tower_x, selected.tower_y), xytext=(30.0, baseline.design.tower_y - 18.0), arrowprops={'arrowstyle': '->', 'color': '#DC2626'}, color='#991B1B', fontsize=10)
+    axis.set_aspect('equal', adjustable='box')
+    axis.set_xlim(-365.0, 365.0)
+    axis.set_ylim(-365.0, 365.0)
+    axis.set_xlabel('东西坐标 x / m')
+    axis.set_ylabel('南北坐标 y / m')
+    axis.set_title('图 3-1 最终六区镜场、场地边界与塔位变化')
+    axis.grid(alpha=0.2)
+    axis.legend(loc='upper right', ncol=2, fontsize=8)
+    figure.tight_layout()
+    path = Path(output_dir) / '19_最终六区镜场与塔位平面图.png'
+    figure.savefig(path, dpi=240)
+    plt.close(figure)
+    return path
+
+def generate_figures(**kwargs: object) -> tuple[Path, Path, Path, Path]:
     configure_matplotlib()
-    return (plot_sensitivity(kwargs['sensitivity_rows'], tower_rows=kwargs['tower_rows'], geometry_rows=kwargs['geometry_rows'], selected_tower_mode=kwargs['selected_tower_mode'], output_dir=kwargs['output_dir']), plot_group_parameters(kwargs['baseline'], kwargs['selected_design'], kwargs['output_dir']), plot_metric_comparison(baseline_formal=kwargs['baseline_formal'], candidate_formal=kwargs['candidate_formal'], dense_payload=kwargs['dense_payload'], output_dir=kwargs['output_dir']))
+    return (plot_sensitivity(kwargs['sensitivity_rows'], tower_rows=kwargs['tower_rows'], geometry_rows=kwargs['geometry_rows'], selected_tower_mode=kwargs['selected_tower_mode'], output_dir=kwargs['output_dir']), plot_group_parameters(kwargs['baseline'], kwargs['selected_design'], kwargs['output_dir']), plot_metric_comparison(baseline_formal=kwargs['baseline_formal'], candidate_formal=kwargs['candidate_formal'], dense_payload=kwargs['dense_payload'], output_dir=kwargs['output_dir']), plot_final_field(baseline=kwargs['baseline'], selected=kwargs['selected_design'], evaluation=kwargs['selected_formal'], output_dir=kwargs['output_dir']))
 
 # ========================================================================
 # 来源：src/heliostat/q3/solve.py
@@ -2064,6 +2210,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--medium-limit', type=int, default=150)
     parser.add_argument('--formal-limit', type=int, default=12)
     parser.add_argument('--max-sweeps', type=int, default=2)
+    parser.add_argument('--closure-sweeps', type=int, default=1)
     parser.add_argument('--move-q', type=float, default=1e-08)
     return parser
 
@@ -2076,6 +2223,8 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise SystemExit('本方案严格使用 --formal-limit 12。')
     if args.max_sweeps < 0 or args.max_sweeps > 2:
         raise SystemExit('--max-sweeps 必须位于 0 到 2。')
+    if args.closure_sweeps < 0 or args.closure_sweeps > 1:
+        raise SystemExit('--closure-sweeps 必须位于 0 到 1。')
     if args.move_q < 0.0:
         raise SystemExit('--move-q 不能小于 0。')
 
@@ -2135,7 +2284,7 @@ def run(argv: Sequence[str] | None=None) -> int:
             else:
                 formal_count += 1
         return (evaluation, None)
-    print('阶段 0/4：六组正式初值回归', flush=True)
+    print('阶段 0/5：六组正式初值回归', flush=True)
     (baseline_formal, reason) = try_evaluate(baseline.design, profile_kind='formal', count_candidate=False)
     if baseline_formal is None:
         raise RuntimeError(f'六组回归无法评价：{reason}')
@@ -2147,7 +2296,7 @@ def run(argv: Sequence[str] | None=None) -> int:
     if baseline_medium is None:
         raise RuntimeError(f'六组中精度基准无法评价：{reason}')
     formal_rows: list[dict[str, object]] = []
-    print('阶段 1/4：塔位模式 A/B 独立扫描', flush=True)
+    print('阶段 1/5：塔位模式 A/B 独立扫描', flush=True)
     tower_internal: list[dict[str, object]] = []
     tower_rows: list[dict[str, object]] = []
     for mode in ('A', 'B'):
@@ -2196,9 +2345,12 @@ def run(argv: Sequence[str] | None=None) -> int:
         tower_active = not math.isclose(current_design.tower_y, baseline.design.tower_y)
         tower_decision = f'正式精度选择模式 {current_design.tower_mode}'
     print(f'塔位语义：{tower_decision}；y={current_design.tower_y:.6f} m', flush=True)
-    print('阶段 2/4：D1、g 一维粗扫及 3×3 局部组合', flush=True)
+    print('阶段 2/5：D1、g 一维粗扫及 3×3 局部组合', flush=True)
     geometry_origin = current_design
     geometry_origin_formal = current_formal
+    (geometry_origin_medium, reason) = try_evaluate(geometry_origin, profile_kind='medium', count_candidate=False)
+    if geometry_origin_medium is None:
+        raise RuntimeError(f'Campo 扫描中精度基准无法评价：{reason}')
     geometry_internal: list[dict[str, object]] = []
     geometry_rows: list[dict[str, object]] = []
 
@@ -2209,6 +2361,8 @@ def run(argv: Sequence[str] | None=None) -> int:
             row.update(metrics(evaluation, target_power_mw=args.target_power))
             row['delta_power_from_six_medium'] = evaluation.annual_power_mw - baseline_medium.annual_power_mw
             row['delta_q_from_six_medium'] = evaluation.unit_area_power_kw_m2 - baseline_medium.unit_area_power_kw_m2
+            row['delta_power_from_tower_medium'] = evaluation.annual_power_mw - geometry_origin_medium.annual_power_mw
+            row['delta_q_from_tower_medium'] = evaluation.unit_area_power_kw_m2 - geometry_origin_medium.unit_area_power_kw_m2
             geometry_internal.append({'row': row, 'design': design, 'medium': evaluation})
         geometry_rows.append(row)
     for delta in (-0.2, -0.1, 0.0, 0.1, 0.2):
@@ -2237,7 +2391,7 @@ def run(argv: Sequence[str] | None=None) -> int:
             current_formal = geometry_formal
     geometry_active = tuple((parameter for parameter in ('initial_spacing', 'spacing_growth') if not math.isclose(current_design.parameter(parameter), geometry_origin.parameter(parameter))))
     print(f'几何固定点：D1={current_design.initial_spacing:.6f} m，g={current_design.spacing_growth:.6f} m/环', flush=True)
-    print('阶段 3/4：18 个六区规格变量正负敏感性', flush=True)
+    print('阶段 3/5：18 个六区规格变量正负敏感性', flush=True)
     (sensitivity_reference, reason) = try_evaluate(current_design, profile_kind='medium', count_candidate=False)
     if sensitivity_reference is None:
         raise RuntimeError(f'敏感性中精度基准无法评价：{reason}')
@@ -2264,7 +2418,7 @@ def run(argv: Sequence[str] | None=None) -> int:
     specification_active = active_from_formal(sensitivity_rows, reference_q=current_formal.unit_area_power_kw_m2, target_power_mw=args.target_power, threshold=args.move_q)
     active_variables = (*(('tower_y',) if tower_active else ()), *geometry_active, *specification_active)
     print(f"正式确认的活跃变量：{active_variables or '无'}", flush=True)
-    print('阶段 4/4：活跃变量两轮分块回扫及统一验收', flush=True)
+    print('阶段 4/5：活跃变量两轮分块回扫', flush=True)
     local_initial = sensitivity_reference
 
     def local_evaluator(design: RefineDesign) -> RefineEvaluation | None:
@@ -2277,6 +2431,28 @@ def run(argv: Sequence[str] | None=None) -> int:
     if attempted_formal is None:
         raise RuntimeError(f'最终候选正式复算失败：{reason}')
     formal_rows.append({'stage': 'final_acceptance', 'candidate': 'local-search-best', **metrics(attempted_formal, target_power_mw=args.target_power), 'delta_q_from_six': attempted_formal.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2})
+    print('阶段 5/5：塔位包围扫描与正式精度最细邻域收口', flush=True)
+    preclosure_formal = attempted_formal
+    closure_values: dict[RefineDesign, RefineEvaluation] = {search.best_design: attempted_formal}
+    closure_count = 0
+
+    def closure_evaluator(design: RefineDesign) -> RefineEvaluation | None:
+        nonlocal closure_count
+        if design in closure_values:
+            return closure_values[design]
+        try:
+            evaluation = evaluate_design(baseline=baseline, design=design, profile=verification_profile, cache=formal_cache)
+        except ValueError:
+            return None
+        closure_values[design] = evaluation
+        closure_count += 1
+        return evaluation
+    closure = close_formal_neighborhood(initial_design=search.best_design, initial_evaluation=attempted_formal, evaluator=closure_evaluator, target_power_mw=args.target_power, coarse_step_limit=2 if args.smoke else 12, fine_radius_steps=1 if args.smoke else 4, maximum_local_sweeps=min(1, args.closure_sweeps) if args.smoke else args.closure_sweeps, move_q_threshold=args.move_q)
+    if not args.smoke and (not closure.tower_bracketed):
+        raise RuntimeError('塔位向北包围扫描未找到下降点。')
+    attempted_formal = closure.best_evaluation
+    formal_rows.append({'stage': 'formal_closure', 'candidate': 'bracketed-local-best', **metrics(attempted_formal, target_power_mw=args.target_power), 'delta_q_from_six': attempted_formal.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2})
+    print(f'收口候选：y={closure.best_design.tower_y:.6f} m，P={attempted_formal.annual_power_mw:.9f} MW，q={attempted_formal.unit_area_power_kw_m2:.9f} kW/m²', flush=True)
     dense_payload: dict[str, object] = {'status': 'not-run-formal-candidate-failed', 'baseline': {}, 'candidate': {}}
     formal_pass = _better(attempted_formal, baseline_formal, target_power_mw=args.target_power, threshold=0.0)
     dense_pass = False
@@ -2289,7 +2465,7 @@ def run(argv: Sequence[str] | None=None) -> int:
         for radius in (80.0, 100.0):
             profile = dense_profile(neighbor_radius_m=radius)
             baseline_dense = evaluate_design(baseline=baseline, design=baseline.design, profile=profile, cache=dense_cache)
-            candidate_dense = evaluate_design(baseline=baseline, design=search.best_design, profile=profile, cache=dense_cache)
+            candidate_dense = evaluate_design(baseline=baseline, design=closure.best_design, profile=profile, cache=dense_cache)
             key = f'{int(radius)}'
             dense_payload['baseline'][key] = metrics(baseline_dense, target_power_mw=args.target_power)
             dense_payload['candidate'][key] = metrics(candidate_dense, target_power_mw=args.target_power)
@@ -2297,25 +2473,25 @@ def run(argv: Sequence[str] | None=None) -> int:
         dense_payload['passed'] = dense_pass
     accepted = formal_pass and (args.smoke or dense_pass)
     if accepted:
-        selected_design = search.best_design
+        selected_design = closure.best_design
         selected_formal = attempted_formal
         decision = '微调方案通过统一正式与加密验收' if not args.smoke else 'smoke 链路通过'
     else:
         selected_design = baseline.design
         selected_formal = baseline_formal
         decision = '微调候选未通过统一验收，保留原六组正式方案'
-    active_payload = {'tower_mode_decision': tower_decision, 'selected_tower_mode': current_design.tower_mode, 'active_variables': list(active_variables), 'tower_active': tower_active, 'geometry_active': list(geometry_active), 'specification_active': list(specification_active), 'medium_candidate_count': medium_count, 'medium_candidate_limit': args.medium_limit, 'formal_candidate_count': formal_count, 'formal_candidate_limit': args.formal_limit, 'maximum_joint_sweeps': args.max_sweeps}
+    active_payload = {'tower_mode_decision': tower_decision, 'selected_tower_mode': current_design.tower_mode, 'active_variables': list(active_variables), 'tower_active': tower_active, 'geometry_active': list(geometry_active), 'specification_active': list(specification_active), 'medium_candidate_count': medium_count, 'medium_candidate_limit': args.medium_limit, 'formal_candidate_count': formal_count, 'formal_candidate_limit': args.formal_limit, 'maximum_joint_sweeps': args.max_sweeps, 'closure': {'tower_bracketed': closure.tower_bracketed, 'local_converged': closure.local_converged, 'local_check_completed': closure.local_sweeps >= 1, 'local_sweeps': closure.local_sweeps, 'accepted_moves': sum((bool(row['accepted']) for row in closure.trace)), 'formal_evaluations': closure_count}}
     regression['smoke'] = args.smoke
     regression['candidate_budgets'] = {'medium': {'used': medium_count, 'limit': args.medium_limit}, 'formal': {'used': formal_count, 'limit': args.formal_limit}}
-    written = write_results(output_dir=args.output, baseline=baseline, regression=regression, tower_rows=tower_rows, geometry_rows=geometry_rows, sensitivity_rows=sensitivity_rows, active_payload=active_payload, search_trace=search.trace, formal_rows=formal_rows, baseline_formal=baseline_formal, attempted_formal=attempted_formal, selected_formal=selected_formal, selected_design=selected_design, dense_payload=dense_payload, result3_template=args.result3_template, target_power_mw=args.target_power, decision=decision)
-    figures = generate_figures(sensitivity_rows=sensitivity_rows, tower_rows=tower_rows, geometry_rows=geometry_rows, selected_tower_mode=current_design.tower_mode, baseline=baseline, selected_design=selected_design, baseline_formal=baseline_formal, candidate_formal=attempted_formal, dense_payload=dense_payload, output_dir=args.output)
+    written = write_results(output_dir=args.output, baseline=baseline, regression=regression, tower_rows=tower_rows, geometry_rows=geometry_rows, sensitivity_rows=sensitivity_rows, active_payload=active_payload, search_trace=search.trace, formal_rows=formal_rows, baseline_formal=baseline_formal, preclosure_formal=preclosure_formal, attempted_formal=attempted_formal, selected_formal=selected_formal, selected_design=selected_design, dense_payload=dense_payload, result3_template=args.result3_template, target_power_mw=args.target_power, decision=decision, closure_rows=closure.trace, closure_payload=active_payload['closure'])
+    figures = generate_figures(sensitivity_rows=sensitivity_rows, tower_rows=tower_rows, geometry_rows=geometry_rows, selected_tower_mode=current_design.tower_mode, baseline=baseline, selected_design=selected_design, baseline_formal=baseline_formal, candidate_formal=selected_formal, selected_formal=selected_formal, dense_payload=dense_payload, output_dir=args.output)
     for (index, path) in enumerate(figures, start=16):
         written[f'figure_{index}'] = path
     print('\n六区参数微调结果', flush=True)
     print(f'判定：{decision}', flush=True)
     print(f'正式候选：P={attempted_formal.annual_power_mw:.9f} MW', flush=True)
     print(f'正式候选：q={attempted_formal.unit_area_power_kw_m2:.9f} kW/m²', flush=True)
-    print(f'候选预算：medium={medium_count}/{args.medium_limit}，formal={formal_count}/{args.formal_limit}', flush=True)
+    print(f'候选预算：medium={medium_count}/{args.medium_limit}，formal={formal_count}/{args.formal_limit}，closure={closure_count}', flush=True)
     for path in written.values():
         print(f'输出：{path}', flush=True)
     return 0

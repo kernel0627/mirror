@@ -38,13 +38,33 @@ POWER_CMAP = "viridis"
 
 
 def configure_matplotlib() -> None:
-    font_path = Path("/System/Library/Fonts/STHeiti Medium.ttc")
-    if font_path.exists():
+    font_candidates = (
+        Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+        Path("/System/Library/Fonts/PingFang.ttc"),
+        Path("C:/Windows/Fonts/msyh.ttc"),
+        Path("C:/Windows/Fonts/simhei.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+    )
+    for font_path in font_candidates:
+        if not font_path.exists():
+            continue
         matplotlib.font_manager.fontManager.addfont(font_path)
-        font_name = matplotlib.font_manager.FontProperties(fname=font_path).get_name()
+        font_name = matplotlib.font_manager.FontProperties(
+            fname=font_path
+        ).get_name()
         plt.rcParams["font.family"] = font_name
+        break
     plt.rcParams.update(
         {
+            "font.sans-serif": [
+                "PingFang SC",
+                "Microsoft YaHei",
+                "SimHei",
+                "Noto Sans CJK SC",
+                "WenQuanYi Zen Hei",
+                "DejaVu Sans",
+            ],
             "axes.unicode_minus": False,
             "figure.facecolor": "white",
             "axes.facecolor": "white",

@@ -23,5 +23,13 @@
   "medium_candidate_limit": 150,
   "formal_candidate_count": 12,
   "formal_candidate_limit": 12,
-  "maximum_joint_sweeps": 2
+  "maximum_joint_sweeps": 2,
+  "closure": {
+    "tower_bracketed": true,
+    "local_converged": false,
+    "local_check_completed": true,
+    "local_sweeps": 1,
+    "accepted_moves": 3,
+    "formal_evaluations": 24
+  }
 }

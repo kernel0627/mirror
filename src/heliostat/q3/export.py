@@ -1,4 +1,4 @@
-"""六区微调实验的 01--14 号数据与提交表导出。"""
+"""六区微调实验的数据、论文表和 result3.xlsx 导出。"""
 
 from __future__ import annotations
 
@@ -32,7 +32,11 @@ def _csv(path: Path, rows: Iterable[dict[str, object]]) -> Path:
             if key not in fields:
                 fields.append(key)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=fields,
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(records)
     return path
@@ -59,6 +63,7 @@ def write_results(
     search_trace: Iterable[dict[str, object]],
     formal_rows: list[dict[str, object]],
     baseline_formal: RefineEvaluation,
+    preclosure_formal: RefineEvaluation,
     attempted_formal: RefineEvaluation,
     selected_formal: RefineEvaluation,
     selected_design: RefineDesign,
@@ -66,6 +71,8 @@ def write_results(
     result3_template: str | Path,
     target_power_mw: float,
     decision: str,
+    closure_rows: Iterable[dict[str, object]],
+    closure_payload: dict[str, object],
 ) -> dict[str, Path]:
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -118,6 +125,11 @@ def write_results(
         "baseline": _comparison_record(
             "six_group_baseline", baseline_formal, target_power_mw=target_power_mw
         ),
+        "preclosure_candidate": _comparison_record(
+            "two_sweep_candidate",
+            preclosure_formal,
+            target_power_mw=target_power_mw,
+        ),
         "attempted_candidate": _comparison_record(
             "refined_candidate", attempted_formal, target_power_mw=target_power_mw
         ),
@@ -125,6 +137,7 @@ def write_results(
             "selected_final", selected_formal, target_power_mw=target_power_mw
         ),
         "selected_design": selected_design.to_dict(),
+        "closure": closure_payload,
     }
     paths["formal"] = _json(destination / "11_正式结果比较.json", comparison)
     paths["dense"] = _json(destination / "12_加密验收比较.json", dense_payload)
@@ -138,7 +151,11 @@ def write_results(
             "group_counts": list(selected_formal.field.group_counts),
         },
     )
-    workbook = destination / "14_第三问最终提交结果.xlsx"
+    paths["closure"] = _csv(
+        destination / "14_局部收口检查.csv",
+        closure_rows,
+    )
+    workbook = destination / "result3.xlsx"
     write_result3_workbook(
         template_path=result3_template,
         output_path=workbook,
@@ -166,7 +183,14 @@ def write_results(
             f"| {baseline_formal.unit_area_power_kw_m2:.9f} |"
         ),
         (
-            f"| 微调候选 | {attempted_formal.mirror_count} "
+            f"| 两轮局部搜索候选 | {preclosure_formal.mirror_count} "
+            f"| {preclosure_formal.annual_power_mw:.9f} "
+            f"| {preclosure_formal.annual_power_mw - target_power_mw:.9f} "
+            f"| {preclosure_formal.total_area_m2:.6f} "
+            f"| {preclosure_formal.unit_area_power_kw_m2:.9f} |"
+        ),
+        (
+            f"| 正式收口候选 | {attempted_formal.mirror_count} "
             f"| {attempted_formal.annual_power_mw:.9f} "
             f"| {attempted_formal.annual_power_mw - target_power_mw:.9f} "
             f"| {attempted_formal.total_area_m2:.6f} "
@@ -174,6 +198,11 @@ def write_results(
         ),
         "",
         f"正式精度候选相对原六组的 $\Delta q={delta_q:.9f}\ \mathrm{{kW/m^2}}$。",
+        "",
+        (
+            "塔位包围扫描已找到北侧下降点；随后完成一次六个活跃变量的"
+            f"正负最细邻域检查，并接受 {closure_payload['accepted_moves']} 个可行改进。"
+        ),
         "",
         "## 表 S3-2 加密精度比较",
         "",
@@ -216,6 +245,6 @@ def write_results(
         )
     )
     table = destination / "15_论文结果与验证表.md"
-    table.write_text("\n".join(lines), encoding="utf-8")
+    table.write_text("\n".join(lines) + "\n", encoding="utf-8")
     paths["table"] = table
     return paths

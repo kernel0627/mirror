@@ -10,6 +10,7 @@ from typing import Sequence
 
 import numpy as np
 
+from .closure import close_formal_neighborhood
 from .evaluate import (
     EvaluationCache,
     RefineEvaluation,
@@ -55,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--medium-limit", type=int, default=150)
     parser.add_argument("--formal-limit", type=int, default=12)
     parser.add_argument("--max-sweeps", type=int, default=2)
+    parser.add_argument("--closure-sweeps", type=int, default=1)
     parser.add_argument("--move-q", type=float, default=1e-8)
     return parser
 
@@ -68,6 +70,8 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise SystemExit("本方案严格使用 --formal-limit 12。")
     if args.max_sweeps < 0 or args.max_sweeps > 2:
         raise SystemExit("--max-sweeps 必须位于 0 到 2。")
+    if args.closure_sweeps < 0 or args.closure_sweeps > 1:
+        raise SystemExit("--closure-sweeps 必须位于 0 到 1。")
     if args.move_q < 0.0:
         raise SystemExit("--move-q 不能小于 0。")
 
@@ -215,7 +219,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 formal_count += 1
         return evaluation, None
 
-    print("阶段 0/4：六组正式初值回归", flush=True)
+    print("阶段 0/5：六组正式初值回归", flush=True)
     baseline_formal, reason = try_evaluate(
         baseline.design,
         profile_kind="formal",
@@ -240,7 +244,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         raise RuntimeError(f"六组中精度基准无法评价：{reason}")
 
     formal_rows: list[dict[str, object]] = []
-    print("阶段 1/4：塔位模式 A/B 独立扫描", flush=True)
+    print("阶段 1/5：塔位模式 A/B 独立扫描", flush=True)
     tower_internal: list[dict[str, object]] = []
     tower_rows: list[dict[str, object]] = []
     for mode in ("A", "B"):
@@ -341,9 +345,16 @@ def run(argv: Sequence[str] | None = None) -> int:
         flush=True,
     )
 
-    print("阶段 2/4：D1、g 一维粗扫及 3×3 局部组合", flush=True)
+    print("阶段 2/5：D1、g 一维粗扫及 3×3 局部组合", flush=True)
     geometry_origin = current_design
     geometry_origin_formal = current_formal
+    geometry_origin_medium, reason = try_evaluate(
+        geometry_origin,
+        profile_kind="medium",
+        count_candidate=False,
+    )
+    if geometry_origin_medium is None:
+        raise RuntimeError(f"Campo 扫描中精度基准无法评价：{reason}")
     geometry_internal: list[dict[str, object]] = []
     geometry_rows: list[dict[str, object]] = []
 
@@ -369,6 +380,14 @@ def run(argv: Sequence[str] | None = None) -> int:
             row["delta_q_from_six_medium"] = (
                 evaluation.unit_area_power_kw_m2
                 - baseline_medium.unit_area_power_kw_m2
+            )
+            row["delta_power_from_tower_medium"] = (
+                evaluation.annual_power_mw
+                - geometry_origin_medium.annual_power_mw
+            )
+            row["delta_q_from_tower_medium"] = (
+                evaluation.unit_area_power_kw_m2
+                - geometry_origin_medium.unit_area_power_kw_m2
             )
             geometry_internal.append({"row": row, "design": design, "medium": evaluation})
         geometry_rows.append(row)
@@ -442,7 +461,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         flush=True,
     )
 
-    print("阶段 3/4：18 个六区规格变量正负敏感性", flush=True)
+    print("阶段 3/5：18 个六区规格变量正负敏感性", flush=True)
     sensitivity_reference, reason = try_evaluate(
         current_design,
         profile_kind="medium",
@@ -533,7 +552,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     )
     print(f"正式确认的活跃变量：{active_variables or '无'}", flush=True)
 
-    print("阶段 4/4：活跃变量两轮分块回扫及统一验收", flush=True)
+    print("阶段 4/5：活跃变量两轮分块回扫", flush=True)
     local_initial = sensitivity_reference
 
     def local_evaluator(design: RefineDesign) -> RefineEvaluation | None:
@@ -570,6 +589,67 @@ def run(argv: Sequence[str] | None = None) -> int:
         }
     )
 
+    print("阶段 5/5：塔位包围扫描与正式精度最细邻域收口", flush=True)
+    preclosure_formal = attempted_formal
+    closure_values: dict[RefineDesign, RefineEvaluation] = {
+        search.best_design: attempted_formal,
+    }
+    closure_count = 0
+
+    def closure_evaluator(
+        design: RefineDesign,
+    ) -> RefineEvaluation | None:
+        nonlocal closure_count
+        if design in closure_values:
+            return closure_values[design]
+        try:
+            evaluation = evaluate_design(
+                baseline=baseline,
+                design=design,
+                profile=verification_profile,
+                cache=formal_cache,
+            )
+        except ValueError:
+            return None
+        closure_values[design] = evaluation
+        closure_count += 1
+        return evaluation
+
+    closure = close_formal_neighborhood(
+        initial_design=search.best_design,
+        initial_evaluation=attempted_formal,
+        evaluator=closure_evaluator,
+        target_power_mw=args.target_power,
+        coarse_step_limit=2 if args.smoke else 12,
+        fine_radius_steps=1 if args.smoke else 4,
+        maximum_local_sweeps=(
+            min(1, args.closure_sweeps)
+            if args.smoke
+            else args.closure_sweeps
+        ),
+        move_q_threshold=args.move_q,
+    )
+    if not args.smoke and not closure.tower_bracketed:
+        raise RuntimeError("塔位向北包围扫描未找到下降点。")
+    attempted_formal = closure.best_evaluation
+    formal_rows.append(
+        {
+            "stage": "formal_closure",
+            "candidate": "bracketed-local-best",
+            **metrics(attempted_formal, target_power_mw=args.target_power),
+            "delta_q_from_six": (
+                attempted_formal.unit_area_power_kw_m2
+                - baseline_formal.unit_area_power_kw_m2
+            ),
+        }
+    )
+    print(
+        f"收口候选：y={closure.best_design.tower_y:.6f} m，"
+        f"P={attempted_formal.annual_power_mw:.9f} MW，"
+        f"q={attempted_formal.unit_area_power_kw_m2:.9f} kW/m²",
+        flush=True,
+    )
+
     dense_payload: dict[str, object] = {
         "status": "not-run-formal-candidate-failed",
         "baseline": {},
@@ -598,7 +678,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             )
             candidate_dense = evaluate_design(
                 baseline=baseline,
-                design=search.best_design,
+                design=closure.best_design,
                 profile=profile,
                 cache=dense_cache,
             )
@@ -617,7 +697,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     accepted = formal_pass and (args.smoke or dense_pass)
     if accepted:
-        selected_design = search.best_design
+        selected_design = closure.best_design
         selected_formal = attempted_formal
         decision = "微调方案通过统一正式与加密验收" if not args.smoke else "smoke 链路通过"
     else:
@@ -637,6 +717,17 @@ def run(argv: Sequence[str] | None = None) -> int:
         "formal_candidate_count": formal_count,
         "formal_candidate_limit": args.formal_limit,
         "maximum_joint_sweeps": args.max_sweeps,
+        "closure": {
+            "tower_bracketed": closure.tower_bracketed,
+            "local_converged": closure.local_converged,
+            "local_check_completed": closure.local_sweeps >= 1,
+            "local_sweeps": closure.local_sweeps,
+            "accepted_moves": sum(
+                bool(row["accepted"])
+                for row in closure.trace
+            ),
+            "formal_evaluations": closure_count,
+        },
     }
     regression["smoke"] = args.smoke
     regression["candidate_budgets"] = {
@@ -654,6 +745,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         search_trace=search.trace,
         formal_rows=formal_rows,
         baseline_formal=baseline_formal,
+        preclosure_formal=preclosure_formal,
         attempted_formal=attempted_formal,
         selected_formal=selected_formal,
         selected_design=selected_design,
@@ -661,6 +753,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         result3_template=args.result3_template,
         target_power_mw=args.target_power,
         decision=decision,
+        closure_rows=closure.trace,
+        closure_payload=active_payload["closure"],
     )
     figures = generate_figures(
         sensitivity_rows=sensitivity_rows,
@@ -670,7 +764,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         baseline=baseline,
         selected_design=selected_design,
         baseline_formal=baseline_formal,
-        candidate_formal=attempted_formal,
+        candidate_formal=selected_formal,
+        selected_formal=selected_formal,
         dense_payload=dense_payload,
         output_dir=args.output,
     )
@@ -681,7 +776,12 @@ def run(argv: Sequence[str] | None = None) -> int:
     print(f"判定：{decision}", flush=True)
     print(f"正式候选：P={attempted_formal.annual_power_mw:.9f} MW", flush=True)
     print(f"正式候选：q={attempted_formal.unit_area_power_kw_m2:.9f} kW/m²", flush=True)
-    print(f"候选预算：medium={medium_count}/{args.medium_limit}，formal={formal_count}/{args.formal_limit}", flush=True)
+    print(
+        f"候选预算：medium={medium_count}/{args.medium_limit}，"
+        f"formal={formal_count}/{args.formal_limit}，"
+        f"closure={closure_count}",
+        flush=True,
+    )
     for path in written.values():
         print(f"输出：{path}", flush=True)
     return 0

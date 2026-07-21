@@ -22,7 +22,11 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         raise ValueError(f"没有可写入 {path.name} 的结果。")
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(rows[0]),
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -114,7 +118,7 @@ def write_question2_results(
     mirror_path = destination / "06_单镜年平均结果.csv"
     summary_path = destination / "07_最终方案摘要.json"
     table_path = destination / "08_论文结果与验证表.md"
-    workbook_path = destination / "10_第二问提交结果.xlsx"
+    workbook_path = destination / "result2.xlsx"
 
     _write_csv(coordinates_path, coordinate_rows)
     _write_csv(monthly_path, monthly_rows)

@@ -2573,7 +2573,11 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         raise ValueError(f"没有可写入 {path.name} 的结果。")
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(rows[0]),
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -2665,7 +2669,7 @@ def write_question2_results(
     mirror_path = destination / "06_单镜年平均结果.csv"
     summary_path = destination / "07_最终方案摘要.json"
     table_path = destination / "08_论文结果与验证表.md"
-    workbook_path = destination / "10_第二问提交结果.xlsx"
+    workbook_path = destination / "result2.xlsx"
 
     _write_csv(coordinates_path, coordinate_rows)
     _write_csv(monthly_path, monthly_rows)
@@ -2910,13 +2914,33 @@ POWER_CMAP = "viridis"
 
 
 def configure_matplotlib() -> None:
-    font_path = Path("/System/Library/Fonts/STHeiti Medium.ttc")
-    if font_path.exists():
+    font_candidates = (
+        Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+        Path("/System/Library/Fonts/PingFang.ttc"),
+        Path("C:/Windows/Fonts/msyh.ttc"),
+        Path("C:/Windows/Fonts/simhei.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+    )
+    for font_path in font_candidates:
+        if not font_path.exists():
+            continue
         matplotlib.font_manager.fontManager.addfont(font_path)
-        font_name = matplotlib.font_manager.FontProperties(fname=font_path).get_name()
+        font_name = matplotlib.font_manager.FontProperties(
+            fname=font_path
+        ).get_name()
         plt.rcParams["font.family"] = font_name
+        break
     plt.rcParams.update(
         {
+            "font.sans-serif": [
+                "PingFang SC",
+                "Microsoft YaHei",
+                "SimHei",
+                "Noto Sans CJK SC",
+                "WenQuanYi Zen Hei",
+                "DejaVu Sans",
+            ],
             "axes.unicode_minus": False,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
