@@ -1,0 +1,27 @@
+{
+  "tower_mode_decision": "正式精度选择模式 B",
+  "selected_tower_mode": "B",
+  "active_variables": [
+    "tower_y",
+    "initial_spacing",
+    "spacing_growth",
+    "w1",
+    "h1",
+    "H2"
+  ],
+  "tower_active": true,
+  "geometry_active": [
+    "initial_spacing",
+    "spacing_growth"
+  ],
+  "specification_active": [
+    "w1",
+    "h1",
+    "H2"
+  ],
+  "medium_candidate_count": 89,
+  "medium_candidate_limit": 150,
+  "formal_candidate_count": 12,
+  "formal_candidate_limit": 12,
+  "maximum_joint_sweeps": 2
+}

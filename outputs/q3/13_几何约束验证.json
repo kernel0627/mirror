@@ -1,0 +1,23 @@
+{
+  "valid": true,
+  "details": {
+    "valid": true,
+    "reason": null,
+    "mirror_count": 1471,
+    "minimum_center_distance_m": 11.756757379732894,
+    "minimum_width_clearance_m": 0.5549150235865863,
+    "maximum_field_radius_m": 349.6199991245491,
+    "minimum_tower_distance_m": 131.76527399690204,
+    "minimum_ground_clearance_m": 0.0005623405606285381
+  },
+  "mirror_set_hash": "d560aec16ee5ed54cb7704f71d4a94429c5c11fc118625a9d688ff6547bac045",
+  "outer_clipped_count": 1769,
+  "group_counts": [
+    72,
+    269,
+    283,
+    224,
+    357,
+    266
+  ]
+}

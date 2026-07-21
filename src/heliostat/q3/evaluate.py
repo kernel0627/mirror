@@ -1,383 +1,184 @@
-"""第三问异构镜场评价、缓存、精度配置和差分经验校准。"""
+"""统一几何预检、四级精度和六区候选评价。"""
 
 from __future__ import annotations
 
-import hashlib
-from dataclasses import dataclass, replace
-from typing import Iterable
+from dataclasses import asdict, dataclass, replace
 
-import numpy as np
-from numpy.typing import NDArray
-
-from ..config import FieldConfig, SolverConfig
-from ..geometry import prepare_field
-from ..q1.aggregate import Question1Solution
-from ..q1.solve import SOLAR_TIMES, solve_question1
+from ..config import FieldConfig
 from ..q2.evaluate import EvaluationProfile
-from .model import (
-    CampoMotherField,
+from ._optics import (
+    EvaluationCache,
+    HeterogeneousEvaluation,
+    coarse_profile as _coarse_profile,
+    dense_profile as _dense_profile,
+    evaluate_specifications as _evaluate_specifications,
+    formal_profile as _formal_profile,
+    medium_profile as _medium_profile,
+    smoke_profile as _smoke_profile,
+)
+from ._baseline import (
     ExpandedSpecifications,
-    GroupDesign,
     HeterogeneousGeometryCheck,
-    expand_group_design,
     validate_heterogeneous_field,
 )
-
-
-FloatArray = NDArray[np.float64]
-IntArray = NDArray[np.int64]
+from .model import RefineBaseline, RefineDesign, RefineField, expand_specifications
+from .tower_modes import build_refine_field
 
 
 @dataclass(frozen=True)
-class HeterogeneousEvaluation:
-    """一套确定逐镜规格和活跃镜集合的完整评价结果。"""
+class RefineEvaluation:
+    design: RefineDesign
+    field: RefineField
+    specifications: ExpandedSpecifications
+    raw: HeterogeneousEvaluation
 
-    profile_name: str
-    coordinates: FloatArray
-    widths: FloatArray
-    heights: FloatArray
-    installation_heights: FloatArray
-    ring_indices: IntArray
-    group_indices: IntArray
-    original_indices: IntArray
-    solution: Question1Solution
-    geometry: HeterogeneousGeometryCheck
+    @property
+    def profile_name(self) -> str:
+        return self.raw.profile_name
 
     @property
     def mirror_count(self) -> int:
-        return int(self.coordinates.shape[0])
+        return self.raw.mirror_count
 
     @property
     def total_area_m2(self) -> float:
-        return float(np.sum(self.widths * self.heights))
+        return self.raw.total_area_m2
 
     @property
     def annual_power_mw(self) -> float:
-        return self.solution.annual_result.field_output_mw
+        return self.raw.annual_power_mw
 
     @property
     def unit_area_power_kw_m2(self) -> float:
-        return self.solution.annual_result.unit_area_output_kw_m2
+        return self.raw.unit_area_power_kw_m2
+
+    @property
+    def geometry(self) -> HeterogeneousGeometryCheck:
+        return self.raw.geometry
 
     def is_feasible(self, target_power_mw: float = 42.0) -> bool:
-        return self.annual_power_mw >= target_power_mw
-
-
-class EvaluationCache:
-    """按坐标、逐镜规格、塔位和数值精度缓存第三问评价。"""
-
-    def __init__(self) -> None:
-        self._values: dict[str, Question1Solution] = {}
-
-    def get(self, key: str) -> Question1Solution | None:
-        return self._values.get(key)
-
-    def put(self, key: str, value: Question1Solution) -> None:
-        self._values[key] = value
-
-    def __len__(self) -> int:
-        return len(self._values)
-
-
-@dataclass(frozen=True)
-class PowerCalibration:
-    """以共同基准构造的粗到参考精度差分经验误差带。"""
-
-    coarse_profile_name: str
-    reference_profile_name: str
-    baseline_coarse_power_mw: float
-    baseline_reference_power_mw: float
-    empirical_bound_mw: float
-    safety_factor: float
-    residuals_mw: tuple[float, ...]
-
-    def estimate_power_mw(
-        self,
-        coarse_evaluation: HeterogeneousEvaluation,
-    ) -> float:
-        return self.baseline_reference_power_mw + (
-            coarse_evaluation.annual_power_mw
-            - self.baseline_coarse_power_mw
-        )
-
-    def lower_power_mw(
-        self,
-        coarse_evaluation: HeterogeneousEvaluation,
-    ) -> float:
-        return self.estimate_power_mw(coarse_evaluation) - self.empirical_bound_mw
-
-    def upper_power_mw(
-        self,
-        coarse_evaluation: HeterogeneousEvaluation,
-    ) -> float:
-        return self.estimate_power_mw(coarse_evaluation) + self.empirical_bound_mw
-
-    def estimated_q_kw_m2(
-        self,
-        coarse_evaluation: HeterogeneousEvaluation,
-    ) -> float:
-        return (
-            1000.0
-            * self.estimate_power_mw(coarse_evaluation)
-            / coarse_evaluation.total_area_m2
-        )
-
-    def lower_q_kw_m2(
-        self,
-        coarse_evaluation: HeterogeneousEvaluation,
-    ) -> float:
-        return (
-            1000.0
-            * self.lower_power_mw(coarse_evaluation)
-            / coarse_evaluation.total_area_m2
-        )
-
-    def upper_q_kw_m2(
-        self,
-        coarse_evaluation: HeterogeneousEvaluation,
-    ) -> float:
-        return (
-            1000.0
-            * self.upper_power_mw(coarse_evaluation)
-            / coarse_evaluation.total_area_m2
-        )
+        return self.raw.is_feasible(target_power_mw)
 
 
 def coarse_profile() -> EvaluationProfile:
-    return EvaluationProfile(
-        name="q3-coarse",
-        solver=SolverConfig(
-            shadow_grid_size=5,
-            truncation_rays=64,
-            neighbor_radius_m=60.0,
-            truncation_chunk_size=128,
-            sobol_seed=2023,
-        ),
-        months=(3, 6, 9, 12),
-        solar_times=SOLAR_TIMES,
-    )
+    return replace(_coarse_profile(), name="q3-six-refine-coarse")
 
 
 def medium_profile() -> EvaluationProfile:
-    return EvaluationProfile(
-        name="q3-medium",
-        solver=SolverConfig(
-            shadow_grid_size=10,
-            truncation_rays=128,
-            neighbor_radius_m=60.0,
-            truncation_chunk_size=128,
-            sobol_seed=2023,
-        ),
-    )
+    return replace(_medium_profile(), name="q3-six-refine-medium")
 
 
 def formal_profile() -> EvaluationProfile:
-    return EvaluationProfile(
-        name="q3-formal",
-        solver=SolverConfig(
-            shadow_grid_size=15,
-            truncation_rays=256,
-            neighbor_radius_m=60.0,
-            truncation_chunk_size=128,
-            sobol_seed=2023,
-        ),
-    )
+    return replace(_formal_profile(), name="q3-six-refine-formal")
 
 
-def dense_profile() -> EvaluationProfile:
-    return EvaluationProfile(
-        name="q3-dense",
-        solver=SolverConfig(
-            shadow_grid_size=20,
-            truncation_rays=512,
-            neighbor_radius_m=80.0,
-            truncation_chunk_size=128,
-            sobol_seed=2023,
-        ),
+def dense_profile(*, neighbor_radius_m: float) -> EvaluationProfile:
+    profile = _dense_profile()
+    return replace(
+        profile,
+        name=f"q3-six-refine-dense-{neighbor_radius_m:g}m",
+        solver=replace(profile.solver, neighbor_radius_m=neighbor_radius_m),
     )
 
 
 def smoke_profile() -> EvaluationProfile:
-    return EvaluationProfile(
-        name="q3-smoke",
-        solver=SolverConfig(
-            shadow_grid_size=2,
-            truncation_rays=4,
-            neighbor_radius_m=60.0,
-            truncation_chunk_size=64,
-            sobol_seed=2023,
-        ),
-        months=(6,),
-        solar_times=(12.0,),
-    )
+    return replace(_smoke_profile(), name="q3-six-refine-smoke")
 
 
-def field_config_from_mother(mother: CampoMotherField) -> FieldConfig:
+def _field_config(baseline: RefineBaseline, design: RefineDesign) -> FieldConfig:
+    parameters = baseline.parameters
     return replace(
         FieldConfig(),
-        field_radius=mother.parameters.field_radius,
-        exclusion_radius=mother.parameters.exclusion_radius,
-        tower_x=mother.parameters.tower_x,
-        tower_y=mother.parameters.tower_y,
-        mirror_width=mother.base_width,
-        mirror_height=mother.base_height,
-        mirror_center_z=mother.base_installation_height,
+        field_radius=parameters.field_radius,
+        exclusion_radius=parameters.exclusion_radius,
+        tower_x=parameters.tower_x,
+        tower_y=design.tower_y,
+        mirror_width=parameters.mirror_width,
+        mirror_height=parameters.mirror_height,
+        mirror_center_z=parameters.installation_height,
     )
 
 
-def _cache_key(
+def prepare_candidate(
     *,
-    coordinates: FloatArray,
-    specifications: ExpandedSpecifications,
-    field_config: FieldConfig,
-    profile: EvaluationProfile,
-) -> str:
-    digest = hashlib.sha256()
-    for values in (
-        coordinates,
-        specifications.widths,
-        specifications.heights,
-        specifications.installation_heights,
-    ):
-        rounded = np.round(np.asarray(values, dtype="<f8"), decimals=9)
-        digest.update(rounded.tobytes(order="C"))
-    digest.update(repr(field_config.to_dict()).encode("utf-8"))
-    digest.update(repr(profile.solver.to_dict()).encode("utf-8"))
-    digest.update(repr(profile.months).encode("ascii"))
-    digest.update(repr(profile.solar_times).encode("ascii"))
-    return digest.hexdigest()
-
-
-def evaluate_specifications(
-    *,
-    coordinates: FloatArray,
-    specifications: ExpandedSpecifications,
-    ring_indices: IntArray,
-    group_indices: IntArray,
-    original_indices: IntArray,
-    field_config: FieldConfig,
-    profile: EvaluationProfile,
-    safety_epsilon: float = 0.01,
-    cache: EvaluationCache | None = None,
-) -> HeterogeneousEvaluation:
-    xy = np.asarray(coordinates, dtype=float)
-    rings = np.asarray(ring_indices, dtype=np.int64)
-    groups = np.asarray(group_indices, dtype=np.int64)
-    originals = np.asarray(original_indices, dtype=np.int64)
-    count = int(xy.shape[0])
-    for name, values in (
-        ("ring_indices", rings),
-        ("group_indices", groups),
-        ("original_indices", originals),
-    ):
-        if values.ndim != 1 or values.shape[0] != count:
-            raise ValueError(f"{name} 长度与镜子数不一致。")
-
-    geometry = validate_heterogeneous_field(
-        coordinates=xy,
+    baseline: RefineBaseline,
+    design: RefineDesign,
+) -> tuple[RefineField, ExpandedSpecifications, HeterogeneousGeometryCheck]:
+    field = build_refine_field(baseline, design)
+    specifications = expand_specifications(field, design)
+    check = validate_heterogeneous_field(
+        coordinates=field.coordinates,
         widths=specifications.widths,
         heights=specifications.heights,
         installation_heights=specifications.installation_heights,
-        tower_x=field_config.tower_x,
-        tower_y=field_config.tower_y,
-        field_radius=field_config.field_radius,
-        exclusion_radius=field_config.exclusion_radius,
-        safety_epsilon=safety_epsilon,
+        tower_x=baseline.parameters.tower_x,
+        tower_y=design.tower_y,
+        field_radius=baseline.parameters.field_radius,
+        exclusion_radius=baseline.parameters.exclusion_radius,
+        safety_epsilon=baseline.parameters.safety_epsilon,
     )
-    if not geometry.valid:
-        raise ValueError(geometry.reason or "异构镜场几何约束不合法。")
-
-    key = _cache_key(
-        coordinates=xy,
-        specifications=specifications,
-        field_config=field_config,
-        profile=profile,
-    )
-    solution = cache.get(key) if cache is not None else None
-    if solution is None:
-        prepared = prepare_field(
-            xy,
-            field_config,
-            mirror_widths=specifications.widths,
-            mirror_heights=specifications.heights,
-            mirror_center_zs=specifications.installation_heights,
-        )
-        solution = solve_question1(
-            prepared=prepared,
-            solver=profile.solver,
-            months=profile.months,
-            solar_times=profile.solar_times,
-        )
-        if cache is not None:
-            cache.put(key, solution)
-
-    return HeterogeneousEvaluation(
-        profile_name=profile.name,
-        coordinates=xy,
-        widths=specifications.widths,
-        heights=specifications.heights,
-        installation_heights=specifications.installation_heights,
-        ring_indices=rings,
-        group_indices=groups,
-        original_indices=originals,
-        solution=solution,
-        geometry=geometry,
-    )
+    return field, specifications, check
 
 
 def evaluate_design(
     *,
-    mother: CampoMotherField,
-    design: GroupDesign,
+    baseline: RefineBaseline,
+    design: RefineDesign,
     profile: EvaluationProfile,
     cache: EvaluationCache | None = None,
-) -> HeterogeneousEvaluation:
-    specifications = expand_group_design(mother, design)
-    return evaluate_specifications(
-        coordinates=mother.coordinates,
+) -> RefineEvaluation:
+    field, specifications, check = prepare_candidate(
+        baseline=baseline,
+        design=design,
+    )
+    if not check.valid:
+        raise ValueError(check.reason or "六区微调候选几何不合法。")
+    raw = _evaluate_specifications(
+        coordinates=field.coordinates,
         specifications=specifications,
-        ring_indices=mother.ring_indices,
-        group_indices=mother.group_indices,
-        original_indices=np.arange(mother.mirror_count, dtype=np.int64),
-        field_config=field_config_from_mother(mother),
+        ring_indices=field.ring_indices,
+        group_indices=field.group_indices,
+        original_indices=field.original_indices,
+        field_config=_field_config(baseline, design),
         profile=profile,
-        safety_epsilon=mother.parameters.safety_epsilon,
+        safety_epsilon=baseline.parameters.safety_epsilon,
         cache=cache,
     )
-
-
-def build_power_calibration(
-    *,
-    baseline_coarse: HeterogeneousEvaluation,
-    baseline_reference: HeterogeneousEvaluation,
-    paired_evaluations: Iterable[
-        tuple[HeterogeneousEvaluation, HeterogeneousEvaluation]
-    ],
-    safety_factor: float = 1.2,
-    minimum_bound_mw: float = 0.0,
-) -> PowerCalibration:
-    if safety_factor < 1.0:
-        raise ValueError("safety_factor 不能小于 1。")
-    residuals: list[float] = []
-    for coarse, reference in paired_evaluations:
-        residuals.append(
-            (
-                reference.annual_power_mw
-                - baseline_reference.annual_power_mw
-            )
-            - (
-                coarse.annual_power_mw
-                - baseline_coarse.annual_power_mw
-            )
-        )
-    maximum = max((abs(value) for value in residuals), default=0.0)
-    bound = max(minimum_bound_mw, safety_factor * maximum)
-    return PowerCalibration(
-        coarse_profile_name=baseline_coarse.profile_name,
-        reference_profile_name=baseline_reference.profile_name,
-        baseline_coarse_power_mw=baseline_coarse.annual_power_mw,
-        baseline_reference_power_mw=baseline_reference.annual_power_mw,
-        empirical_bound_mw=bound,
-        safety_factor=safety_factor,
-        residuals_mw=tuple(residuals),
+    return RefineEvaluation(
+        design=design,
+        field=field,
+        specifications=specifications,
+        raw=raw,
     )
+
+
+def metrics(evaluation: RefineEvaluation, *, target_power_mw: float = 42.0) -> dict[str, object]:
+    annual = asdict(evaluation.raw.solution.annual_result)
+    return {
+        "profile": evaluation.profile_name,
+        "tower_mode": evaluation.design.tower_mode,
+        "tower_x_m": 0.0,
+        "tower_y_m": evaluation.design.tower_y,
+        "mirror_count": evaluation.mirror_count,
+        "mirror_set_hash": evaluation.field.mirror_set_hash,
+        "outer_clipped_count": evaluation.field.outer_clipped_count,
+        "total_area_m2": evaluation.total_area_m2,
+        "annual_power_mw": evaluation.annual_power_mw,
+        "power_margin_mw": evaluation.annual_power_mw - target_power_mw,
+        "unit_area_power_kw_m2": evaluation.unit_area_power_kw_m2,
+        **annual,
+    }
+
+
+__all__ = (
+    "EvaluationCache",
+    "RefineEvaluation",
+    "coarse_profile",
+    "dense_profile",
+    "evaluate_design",
+    "formal_profile",
+    "medium_profile",
+    "metrics",
+    "prepare_candidate",
+    "smoke_profile",
+)

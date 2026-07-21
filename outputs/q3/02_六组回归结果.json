@@ -1,0 +1,60 @@
+{
+  "passed": true,
+  "expected": {
+    "mirror_count": 1471,
+    "total_area_m2": 60777.39103369038,
+    "annual_power_mw": 42.051608025429616,
+    "unit_area_power_kw_m2": 0.6918955767963023
+  },
+  "actual": {
+    "profile": "q3-six-refine-formal",
+    "tower_mode": "A",
+    "tower_x_m": 0.0,
+    "tower_y_m": -181.8000539392233,
+    "mirror_count": 1471,
+    "mirror_set_hash": "d560aec16ee5ed54cb7704f71d4a94429c5c11fc118625a9d688ff6547bac045",
+    "outer_clipped_count": 1769,
+    "total_area_m2": 60777.39103369038,
+    "annual_power_mw": 42.051608025429616,
+    "power_margin_mw": 0.05160802542961562,
+    "unit_area_power_kw_m2": 0.6918955767963023,
+    "average_optical_efficiency": 0.7133543519598581,
+    "average_cosine_efficiency": 0.8428877923752294,
+    "average_shadow_blocking_efficiency": 0.9810317316194804,
+    "average_atmospheric_efficiency": 0.9597762039735313,
+    "average_truncation_efficiency": 0.9786557889830242,
+    "field_output_mw": 42.051608025429616,
+    "unit_area_output_kw_m2": 0.6918955767963023
+  },
+  "errors": {
+    "mirror_count": 0,
+    "coordinate_max_abs_m": 0.0,
+    "total_area_m2": 0.0,
+    "annual_power_mw": 0.0,
+    "unit_area_power_kw_m2": 0.0,
+    "width_max_abs_m": 0.0,
+    "height_max_abs_m": 0.0,
+    "installation_height_max_abs_m": 0.0
+  },
+  "tolerances": {
+    "mirror_count": 0,
+    "coordinate_max_abs_m": 1e-12,
+    "total_area_m2": 1e-06,
+    "annual_power_mw": 1e-06,
+    "unit_area_power_kw_m2": 1e-09,
+    "width_max_abs_m": 0.0,
+    "height_max_abs_m": 0.0,
+    "installation_height_max_abs_m": 0.0
+  },
+  "smoke": false,
+  "candidate_budgets": {
+    "medium": {
+      "used": 89,
+      "limit": 150
+    },
+    "formal": {
+      "used": 12,
+      "limit": 12
+    }
+  }
+}

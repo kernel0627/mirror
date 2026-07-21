@@ -20,11 +20,16 @@ SOURCE_PATHS = (
     "src/heliostat/q1/solve.py",
     "src/heliostat/q2/layout.py",
     "src/heliostat/q2/evaluate.py",
+    "src/heliostat/q3/_baseline.py",
+    "src/heliostat/q3/_optics.py",
+    "src/heliostat/q3/_workbook.py",
     "src/heliostat/q3/model.py",
+    "src/heliostat/q3/tower_modes.py",
     "src/heliostat/q3/evaluate.py",
+    "src/heliostat/q3/sensitivity.py",
     "src/heliostat/q3/search.py",
-    "src/heliostat/q3/prune.py",
     "src/heliostat/q3/export.py",
+    "src/heliostat/q3/plot.py",
     "src/heliostat/q3/solve.py",
 )
 

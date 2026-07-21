@@ -1184,7 +1184,7 @@ def scan_layout_extents(layout: GeneratedLayout, parameters: LayoutParameters, p
     return ExtentScanResult(best=best, evaluations=values, first_feasible_ring_count=first_feasible)
 
 # ========================================================================
-# 来源：src/heliostat/q3/model.py
+# 来源：src/heliostat/q3/_baseline.py
 # ========================================================================
 
 """第三问母场、六组规格展开和异构几何约束。"""
@@ -1229,27 +1229,6 @@ class CampoMotherField:
     @property
     def base_installation_height(self) -> float:
         return self.parameters.installation_height
-
-@dataclass(frozen=True)
-class GroupDesign:
-    """六组镜面尺度与安装高度。"""
-    scales: tuple[float, ...]
-    heights: tuple[float, ...]
-
-    def __post_init__(self) -> None:
-        if len(self.scales) != GROUP_COUNT:
-            raise ValueError(f'scales 必须包含 {GROUP_COUNT} 个值。')
-        if len(self.heights) != GROUP_COUNT:
-            raise ValueError(f'heights 必须包含 {GROUP_COUNT} 个值。')
-        values = self.scales + self.heights
-        if not all((math.isfinite(value) for value in values)):
-            raise ValueError('组设计参数必须全部为有限数。')
-        if any((value <= 0.0 for value in self.scales)):
-            raise ValueError('组尺度必须全部大于 0。')
-
-    @classmethod
-    def uniform(cls, installation_height: float) -> GroupDesign:
-        return cls(scales=(1.0,) * GROUP_COUNT, heights=(installation_height,) * GROUP_COUNT)
 
 @dataclass(frozen=True)
 class ExpandedSpecifications:
@@ -1309,25 +1288,6 @@ def build_campo_mother_field(summary_path: str | Path, *, require_recorded_struc
         raise ValueError(f'问题二 Campo 结构已变化：期望组镜数 {EXPECTED_GROUP_COUNTS}，实际为 {mother.group_counts}。')
     return mother
 
-def expand_group_design(mother: CampoMotherField, design: GroupDesign) -> ExpandedSpecifications:
-    group_indices = mother.group_indices
-    scales = np.asarray(design.scales, dtype=float)[group_indices]
-    installation_heights = np.asarray(design.heights, dtype=float)[group_indices]
-    widths = mother.base_width * scales
-    heights = mother.base_height * scales
-    return ExpandedSpecifications(widths=widths, heights=heights, installation_heights=installation_heights, areas=widths * heights)
-
-def individual_width_caps(coordinates: FloatArray, *, safety_epsilon: float=0.01) -> FloatArray:
-    xy = np.asarray(coordinates, dtype=float)
-    if xy.ndim != 2 or xy.shape[1] != 2 or xy.shape[0] < 2:
-        raise ValueError('至少需要两个 N×2 镜位计算宽度上限。')
-    distances = cKDTree(xy).query(xy, k=2)[0][:, 1]
-    return np.minimum(8.0, distances - 5.0 - safety_epsilon)
-
-def group_width_caps(mother: CampoMotherField, *, safety_epsilon: float=0.01) -> tuple[float, ...]:
-    caps = individual_width_caps(mother.coordinates, safety_epsilon=safety_epsilon)
-    return tuple((float(np.min(caps[mother.group_indices == group])) for group in range(GROUP_COUNT)))
-
 def validate_heterogeneous_field(*, coordinates: FloatArray, widths: FloatArray, heights: FloatArray, installation_heights: FloatArray, tower_x: float, tower_y: float, field_radius: float=350.0, exclusion_radius: float=100.0, safety_epsilon: float=0.01) -> HeterogeneousGeometryCheck:
     xy = np.asarray(coordinates, dtype=float)
     mirror_widths = np.asarray(widths, dtype=float)
@@ -1377,13 +1337,12 @@ def validate_heterogeneous_field(*, coordinates: FloatArray, widths: FloatArray,
     return HeterogeneousGeometryCheck(valid=True, reason=None, mirror_count=mirror_count, minimum_center_distance_m=minimum_center_distance, minimum_width_clearance_m=minimum_width_clearance, maximum_field_radius_m=maximum_field_radius, minimum_tower_distance_m=minimum_tower_distance, minimum_ground_clearance_m=float(np.min(ground_clearance)))
 
 # ========================================================================
-# 来源：src/heliostat/q3/evaluate.py
+# 来源：src/heliostat/q3/_optics.py
 # ========================================================================
 
-"""第三问异构镜场评价、缓存、精度配置和差分经验校准。"""
+"""第三问异构镜场评价、缓存和精度配置。"""
 import hashlib
-from dataclasses import dataclass, replace
-from typing import Iterable
+from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 FloatArray = NDArray[np.float64]
@@ -1437,35 +1396,6 @@ class EvaluationCache:
     def __len__(self) -> int:
         return len(self._values)
 
-@dataclass(frozen=True)
-class PowerCalibration:
-    """以共同基准构造的粗到参考精度差分经验误差带。"""
-    coarse_profile_name: str
-    reference_profile_name: str
-    baseline_coarse_power_mw: float
-    baseline_reference_power_mw: float
-    empirical_bound_mw: float
-    safety_factor: float
-    residuals_mw: tuple[float, ...]
-
-    def estimate_power_mw(self, coarse_evaluation: HeterogeneousEvaluation) -> float:
-        return self.baseline_reference_power_mw + (coarse_evaluation.annual_power_mw - self.baseline_coarse_power_mw)
-
-    def lower_power_mw(self, coarse_evaluation: HeterogeneousEvaluation) -> float:
-        return self.estimate_power_mw(coarse_evaluation) - self.empirical_bound_mw
-
-    def upper_power_mw(self, coarse_evaluation: HeterogeneousEvaluation) -> float:
-        return self.estimate_power_mw(coarse_evaluation) + self.empirical_bound_mw
-
-    def estimated_q_kw_m2(self, coarse_evaluation: HeterogeneousEvaluation) -> float:
-        return 1000.0 * self.estimate_power_mw(coarse_evaluation) / coarse_evaluation.total_area_m2
-
-    def lower_q_kw_m2(self, coarse_evaluation: HeterogeneousEvaluation) -> float:
-        return 1000.0 * self.lower_power_mw(coarse_evaluation) / coarse_evaluation.total_area_m2
-
-    def upper_q_kw_m2(self, coarse_evaluation: HeterogeneousEvaluation) -> float:
-        return 1000.0 * self.upper_power_mw(coarse_evaluation) / coarse_evaluation.total_area_m2
-
 def coarse_profile() -> EvaluationProfile:
     return EvaluationProfile(name='q3-coarse', solver=SolverConfig(shadow_grid_size=5, truncation_rays=64, neighbor_radius_m=60.0, truncation_chunk_size=128, sobol_seed=2023), months=(3, 6, 9, 12), solar_times=SOLAR_TIMES)
 
@@ -1480,9 +1410,6 @@ def dense_profile() -> EvaluationProfile:
 
 def smoke_profile() -> EvaluationProfile:
     return EvaluationProfile(name='q3-smoke', solver=SolverConfig(shadow_grid_size=2, truncation_rays=4, neighbor_radius_m=60.0, truncation_chunk_size=64, sobol_seed=2023), months=(6,), solar_times=(12.0,))
-
-def field_config_from_mother(mother: CampoMotherField) -> FieldConfig:
-    return replace(FieldConfig(), field_radius=mother.parameters.field_radius, exclusion_radius=mother.parameters.exclusion_radius, tower_x=mother.parameters.tower_x, tower_y=mother.parameters.tower_y, mirror_width=mother.base_width, mirror_height=mother.base_height, mirror_center_z=mother.base_installation_height)
 
 def _cache_key(*, coordinates: FloatArray, specifications: ExpandedSpecifications, field_config: FieldConfig, profile: EvaluationProfile) -> str:
     digest = hashlib.sha256()
@@ -1516,327 +1443,14 @@ def evaluate_specifications(*, coordinates: FloatArray, specifications: Expanded
             cache.put(key, solution)
     return HeterogeneousEvaluation(profile_name=profile.name, coordinates=xy, widths=specifications.widths, heights=specifications.heights, installation_heights=specifications.installation_heights, ring_indices=rings, group_indices=groups, original_indices=originals, solution=solution, geometry=geometry)
 
-def evaluate_design(*, mother: CampoMotherField, design: GroupDesign, profile: EvaluationProfile, cache: EvaluationCache | None=None) -> HeterogeneousEvaluation:
-    specifications = expand_group_design(mother, design)
-    return evaluate_specifications(coordinates=mother.coordinates, specifications=specifications, ring_indices=mother.ring_indices, group_indices=mother.group_indices, original_indices=np.arange(mother.mirror_count, dtype=np.int64), field_config=field_config_from_mother(mother), profile=profile, safety_epsilon=mother.parameters.safety_epsilon, cache=cache)
-
-def build_power_calibration(*, baseline_coarse: HeterogeneousEvaluation, baseline_reference: HeterogeneousEvaluation, paired_evaluations: Iterable[tuple[HeterogeneousEvaluation, HeterogeneousEvaluation]], safety_factor: float=1.2, minimum_bound_mw: float=0.0) -> PowerCalibration:
-    if safety_factor < 1.0:
-        raise ValueError('safety_factor 不能小于 1。')
-    residuals: list[float] = []
-    for (coarse, reference) in paired_evaluations:
-        residuals.append(reference.annual_power_mw - baseline_reference.annual_power_mw - (coarse.annual_power_mw - baseline_coarse.annual_power_mw))
-    maximum = max((abs(value) for value in residuals), default=0.0)
-    bound = max(minimum_bound_mw, safety_factor * maximum)
-    return PowerCalibration(coarse_profile_name=baseline_coarse.profile_name, reference_profile_name=baseline_reference.profile_name, baseline_coarse_power_mw=baseline_coarse.annual_power_mw, baseline_reference_power_mw=baseline_reference.annual_power_mw, empirical_bound_mw=bound, safety_factor=safety_factor, residuals_mw=tuple(residuals))
-
 # ========================================================================
-# 来源：src/heliostat/q3/search.py
+# 来源：src/heliostat/q3/_workbook.py
 # ========================================================================
 
-"""第三问六组高度、面积再分配和面积压缩搜索。"""
-import math
-from dataclasses import dataclass
-from typing import Callable, Iterable
-ProgressCallback = Callable[[str], None]
-
-@dataclass(frozen=True)
-class SearchStep:
-    stage: str
-    action: str
-    design: GroupDesign
-    evaluation: HeterogeneousEvaluation
-    estimated_power_mw: float
-    empirical_bound_mw: float
-
-@dataclass(frozen=True)
-class SearchOutcome:
-    baseline_design: GroupDesign
-    baseline_evaluation: HeterogeneousEvaluation
-    best_design: GroupDesign
-    best_evaluation: HeterogeneousEvaluation
-    calibration: PowerCalibration
-    calibration_pairs: tuple[tuple[HeterogeneousEvaluation, HeterogeneousEvaluation], ...]
-    trace: tuple[SearchStep, ...]
-    stage_evaluations: tuple[tuple[str, HeterogeneousEvaluation], ...]
-
-def _replace_tuple(values: tuple[float, ...], index: int, value: float) -> tuple[float, ...]:
-    mutable = list(values)
-    mutable[index] = value
-    return tuple(mutable)
-
-def with_height(design: GroupDesign, group: int, value: float) -> GroupDesign:
-    return GroupDesign(scales=design.scales, heights=_replace_tuple(design.heights, group, value))
-
-def with_scale(design: GroupDesign, group: int, value: float) -> GroupDesign:
-    return GroupDesign(scales=_replace_tuple(design.scales, group, value), heights=design.heights)
-
-def transfer_area(*, design: GroupDesign, source_group: int, target_group: int, delta_area_m2: float, group_counts: tuple[int, ...], base_mirror_area_m2: float) -> GroupDesign:
-    if source_group == target_group:
-        raise ValueError('面积转移的来源组和目标组不能相同。')
-    if delta_area_m2 <= 0.0:
-        raise ValueError('面积转移量必须大于 0。')
-    source_square = design.scales[source_group] ** 2 - delta_area_m2 / (group_counts[source_group] * base_mirror_area_m2)
-    target_square = design.scales[target_group] ** 2 + delta_area_m2 / (group_counts[target_group] * base_mirror_area_m2)
-    if source_square <= 0.0:
-        raise ValueError('面积转移量超过来源组当前面积。')
-    scales = list(design.scales)
-    scales[source_group] = math.sqrt(source_square)
-    scales[target_group] = math.sqrt(target_square)
-    return GroupDesign(tuple(scales), design.heights)
-
-def calibration_designs(baseline: GroupDesign, count: int) -> tuple[GroupDesign, ...]:
-    """生成覆盖六组高度和少量尺度方向的确定性局部标定候选。"""
-    if count < 0:
-        raise ValueError('标定候选数不能小于 0。')
-    candidates: list[GroupDesign] = []
-    for direction in (1.0, -1.0):
-        for group in range(GROUP_COUNT):
-            candidates.append(with_height(baseline, group, baseline.heights[group] + direction * 0.25))
-    for group in range(GROUP_COUNT):
-        candidates.append(with_scale(baseline, group, baseline.scales[group] - 0.01))
-    return tuple(candidates[:count])
-
-class _SearchContext:
-
-    def __init__(self, *, mother: CampoMotherField, coarse_profile: EvaluationProfile, reference_profile: EvaluationProfile, baseline_design: GroupDesign, cache: EvaluationCache, target_power_mw: float, q_improvement_threshold: float, calibration_safety_factor: float, calibration_pairs: list[tuple[HeterogeneousEvaluation, HeterogeneousEvaluation]], baseline_coarse: HeterogeneousEvaluation, baseline_reference: HeterogeneousEvaluation, progress: ProgressCallback | None) -> None:
-        self.mother = mother
-        self.coarse_profile = coarse_profile
-        self.reference_profile = reference_profile
-        self.cache = cache
-        self.target_power_mw = target_power_mw
-        self.q_improvement_threshold = q_improvement_threshold
-        self.calibration_safety_factor = calibration_safety_factor
-        self.calibration_pairs = calibration_pairs
-        self.baseline_coarse = baseline_coarse
-        self.baseline_reference = baseline_reference
-        self.current_design = baseline_design
-        self.current_coarse = baseline_coarse
-        self.current_reference = baseline_reference
-        self.progress = progress
-        self.trace: list[SearchStep] = []
-        self.calibration = self._rebuild_calibration()
-
-    def _rebuild_calibration(self) -> PowerCalibration:
-        return build_power_calibration(baseline_coarse=self.baseline_coarse, baseline_reference=self.baseline_reference, paired_evaluations=self.calibration_pairs, safety_factor=self.calibration_safety_factor)
-
-    def _evaluate_coarse(self, design: GroupDesign) -> HeterogeneousEvaluation | None:
-        try:
-            return evaluate_design(mother=self.mother, design=design, profile=self.coarse_profile, cache=self.cache)
-        except ValueError:
-            return None
-
-    def _evaluate_reference(self, design: GroupDesign) -> HeterogeneousEvaluation | None:
-        try:
-            return evaluate_design(mother=self.mother, design=design, profile=self.reference_profile, cache=self.cache)
-        except ValueError:
-            return None
-
-    def try_candidates(self, *, stage: str, candidates: Iterable[tuple[str, GroupDesign]]) -> bool:
-        ranked: list[tuple[float, str, GroupDesign, HeterogeneousEvaluation]] = []
-        current_estimated_q = self.calibration.estimated_q_kw_m2(self.current_coarse)
-        for (action, design) in candidates:
-            coarse = self._evaluate_coarse(design)
-            if coarse is None:
-                continue
-            if self.calibration.upper_power_mw(coarse) < self.target_power_mw:
-                continue
-            estimated_q = self.calibration.estimated_q_kw_m2(coarse)
-            if estimated_q <= current_estimated_q + self.q_improvement_threshold:
-                continue
-            ranked.append((estimated_q, action, design, coarse))
-        ranked.sort(key=lambda item: item[0], reverse=True)
-        for (_, action, design, coarse) in ranked:
-            reference = self._evaluate_reference(design)
-            if reference is None:
-                continue
-            self.calibration_pairs.append((coarse, reference))
-            self.calibration = self._rebuild_calibration()
-            if not reference.is_feasible(self.target_power_mw):
-                continue
-            if reference.unit_area_power_kw_m2 <= self.current_reference.unit_area_power_kw_m2 + self.q_improvement_threshold:
-                continue
-            self.current_design = design
-            self.current_coarse = coarse
-            self.current_reference = reference
-            self.trace.append(SearchStep(stage=stage, action=action, design=design, evaluation=reference, estimated_power_mw=self.calibration.estimate_power_mw(coarse), empirical_bound_mw=self.calibration.empirical_bound_mw))
-            if self.progress is not None:
-                self.progress(f'{stage} 接受 {action}：P={reference.annual_power_mw:.6f} MW，q={reference.unit_area_power_kw_m2:.6f} kW/m²')
-            return True
-        return False
-
-def _height_candidates(design: GroupDesign, group: int, step: float) -> tuple[tuple[str, GroupDesign], ...]:
-    return tuple(((f"H{group + 1}{('+' if direction > 0 else '-')}{step:g}", with_height(design, group, design.heights[group] + direction * step)) for direction in (-1.0, 1.0)))
-
-def _scale_candidates(design: GroupDesign, group: int, step: float) -> tuple[tuple[str, GroupDesign], ...]:
-    return tuple(((f"s{group + 1}{('+' if direction > 0 else '-')}{step:g}", with_scale(design, group, design.scales[group] + direction * step)) for direction in (-1.0, 1.0)))
-
-def _transfer_candidates(*, design: GroupDesign, area_fraction: float, total_area_m2: float, group_counts: tuple[int, ...], base_mirror_area_m2: float) -> tuple[tuple[str, GroupDesign], ...]:
-    preferred_pairs = ((3, 2), (3, 4), (5, 2), (5, 4))
-    delta_area = total_area_m2 * area_fraction
-    candidates: list[tuple[str, GroupDesign]] = []
-    for (left, right) in preferred_pairs:
-        for (source, target) in ((left, right), (right, left)):
-            try:
-                candidate = transfer_area(design=design, source_group=source, target_group=target, delta_area_m2=delta_area, group_counts=group_counts, base_mirror_area_m2=base_mirror_area_m2)
-            except ValueError:
-                continue
-            candidates.append((f'G{source + 1}->G{target + 1},ΔA={delta_area:.3f}', candidate))
-    return tuple(candidates)
-
-def optimize_group_design(*, mother: CampoMotherField, coarse_profile: EvaluationProfile, reference_profile: EvaluationProfile, target_power_mw: float=42.0, calibration_candidate_count: int=6, calibration_safety_factor: float=1.2, maximum_cycles_per_level: int=2, q_improvement_threshold: float=1e-05, height_steps: tuple[float, ...]=(0.4, 0.2, 0.1), scale_steps: tuple[float, ...]=(0.03, 0.015, 0.005), area_transfer_fractions: tuple[float, ...]=(0.005, 0.002, 0.001), cache: EvaluationCache | None=None, progress: ProgressCallback | None=None) -> SearchOutcome:
-    if maximum_cycles_per_level < 0:
-        raise ValueError('maximum_cycles_per_level 不能小于 0。')
-    working_cache = cache or EvaluationCache()
-    baseline_design = GroupDesign.uniform(mother.base_installation_height)
-    baseline_coarse = evaluate_design(mother=mother, design=baseline_design, profile=coarse_profile, cache=working_cache)
-    baseline_reference = evaluate_design(mother=mother, design=baseline_design, profile=reference_profile, cache=working_cache)
-    pairs: list[tuple[HeterogeneousEvaluation, HeterogeneousEvaluation]] = []
-    for candidate in calibration_designs(baseline_design, calibration_candidate_count):
-        try:
-            coarse = evaluate_design(mother=mother, design=candidate, profile=coarse_profile, cache=working_cache)
-            reference = evaluate_design(mother=mother, design=candidate, profile=reference_profile, cache=working_cache)
-        except ValueError:
-            continue
-        pairs.append((coarse, reference))
-    context = _SearchContext(mother=mother, coarse_profile=coarse_profile, reference_profile=reference_profile, baseline_design=baseline_design, cache=working_cache, target_power_mw=target_power_mw, q_improvement_threshold=q_improvement_threshold, calibration_safety_factor=calibration_safety_factor, calibration_pairs=pairs, baseline_coarse=baseline_coarse, baseline_reference=baseline_reference, progress=progress)
-    stage_evaluations: list[tuple[str, HeterogeneousEvaluation]] = [('uniform-1471', baseline_reference)]
-    for (level, step) in enumerate(height_steps, start=1):
-        for cycle in range(maximum_cycles_per_level):
-            improved = False
-            order = range(GROUP_COUNT) if cycle % 2 == 0 else reversed(range(GROUP_COUNT))
-            for group in order:
-                improved |= context.try_candidates(stage=f'height-L{level}', candidates=_height_candidates(context.current_design, group, step))
-            if not improved:
-                break
-    stage_evaluations.append(('height-only', context.current_reference))
-    base_area = mother.mirror_count * mother.base_width * mother.base_height
-    for (level, fraction) in enumerate(area_transfer_fractions, start=1):
-        for _ in range(maximum_cycles_per_level):
-            improved = context.try_candidates(stage=f'transfer-L{level}', candidates=_transfer_candidates(design=context.current_design, area_fraction=fraction, total_area_m2=base_area, group_counts=mother.group_counts, base_mirror_area_m2=mother.base_width * mother.base_height))
-            if not improved:
-                break
-    stage_evaluations.append(('height-transfer', context.current_reference))
-    for (level, step) in enumerate(scale_steps, start=1):
-        for cycle in range(maximum_cycles_per_level):
-            improved = False
-            order = range(GROUP_COUNT) if cycle % 2 == 0 else reversed(range(GROUP_COUNT))
-            for group in order:
-                improved |= context.try_candidates(stage=f'scale-L{level}', candidates=_scale_candidates(context.current_design, group, step))
-            if level <= len(area_transfer_fractions):
-                improved |= context.try_candidates(stage=f'rescan-transfer-L{level}', candidates=_transfer_candidates(design=context.current_design, area_fraction=area_transfer_fractions[level - 1], total_area_m2=base_area, group_counts=mother.group_counts, base_mirror_area_m2=mother.base_width * mother.base_height))
-            for group in reversed(range(GROUP_COUNT)):
-                improved |= context.try_candidates(stage=f'height-rescan-L{level}', candidates=_height_candidates(context.current_design, group, min(0.1, height_steps[-1])))
-            if not improved:
-                break
-    stage_evaluations.append(('height-size', context.current_reference))
-    return SearchOutcome(baseline_design=baseline_design, baseline_evaluation=baseline_reference, best_design=context.current_design, best_evaluation=context.current_reference, calibration=context.calibration, calibration_pairs=tuple(context.calibration_pairs), trace=tuple(context.trace), stage_evaluations=tuple(stage_evaluations))
-
-# ========================================================================
-# 来源：src/heliostat/q3/prune.py
-# ========================================================================
-
-"""第三问低贡献东西对称镜位的结构化删镜。"""
-from dataclasses import dataclass
-import numpy as np
-
-@dataclass(frozen=True)
-class PruneStep:
-    removed_original_indices: tuple[int, ...]
-    evaluation: HeterogeneousEvaluation
-
-@dataclass(frozen=True)
-class PruneOutcome:
-    initial: HeterogeneousEvaluation
-    best: HeterogeneousEvaluation
-    steps: tuple[PruneStep, ...]
-
-def symmetric_pairs(evaluation: HeterogeneousEvaluation, *, tolerance: float=1e-07) -> tuple[tuple[int, int], ...]:
-    coordinates = evaluation.coordinates
-    unused = set(range(evaluation.mirror_count))
-    pairs: list[tuple[int, int]] = []
-    while unused:
-        index = min(unused)
-        unused.remove(index)
-        (x_m, y_m) = coordinates[index]
-        if abs(float(x_m)) <= tolerance:
-            continue
-        partners = [other for other in unused if abs(float(coordinates[other, 0] + x_m)) <= tolerance and abs(float(coordinates[other, 1] - y_m)) <= tolerance]
-        if not partners:
-            continue
-        partner = min(partners)
-        unused.remove(partner)
-        pairs.append((index, partner))
-    return tuple(pairs)
-
-def _rank_pairs(evaluation: HeterogeneousEvaluation, pairs: tuple[tuple[int, int], ...]) -> list[tuple[int, int]]:
-    mirror_power = np.array([record.average_output_power_kw for record in evaluation.solution.mirror_annual_results], dtype=float)
-
-    def key(pair: tuple[int, int]) -> tuple[int, float, int]:
-        groups = evaluation.group_indices[list(pair)]
-        rings = evaluation.ring_indices[list(pair)]
-        preferred = bool(np.any(np.isin(groups, (3, 5))) or np.any(rings == 12) or np.any(rings >= 24))
-        return (0 if preferred else 1, float(np.sum(mirror_power[list(pair)])), -int(np.max(rings)))
-    return sorted(pairs, key=key)
-
-def _remove_pair(*, current: HeterogeneousEvaluation, pair: tuple[int, int], mother: CampoMotherField, profile: EvaluationProfile, cache: EvaluationCache | None) -> HeterogeneousEvaluation:
-    active = np.ones(current.mirror_count, dtype=bool)
-    active[list(pair)] = False
-    specifications = ExpandedSpecifications(widths=current.widths[active], heights=current.heights[active], installation_heights=current.installation_heights[active], areas=current.widths[active] * current.heights[active])
-    return evaluate_specifications(coordinates=current.coordinates[active], specifications=specifications, ring_indices=current.ring_indices[active], group_indices=current.group_indices[active], original_indices=current.original_indices[active], field_config=field_config_from_mother(mother), profile=profile, safety_epsilon=mother.parameters.safety_epsilon, cache=cache)
-
-def prune_symmetric_pairs(*, mother: CampoMotherField, initial: HeterogeneousEvaluation, profile: EvaluationProfile, target_power_mw: float=42.0, maximum_rounds: int=4, maximum_pairs_per_round: int=12, q_improvement_threshold: float=1e-05, cache: EvaluationCache | None=None) -> PruneOutcome:
-    if maximum_rounds < 0:
-        raise ValueError('maximum_rounds 不能小于 0。')
-    if maximum_pairs_per_round < 1:
-        raise ValueError('maximum_pairs_per_round 必须大于等于 1。')
-    if not initial.is_feasible(target_power_mw):
-        raise ValueError('结构化删镜要求初始方案满足功率约束。')
-    current = initial
-    steps: list[PruneStep] = []
-    for _ in range(maximum_rounds):
-        pairs = _rank_pairs(current, symmetric_pairs(current))
-        pairs = pairs[:maximum_pairs_per_round]
-        best_pair: tuple[int, int] | None = None
-        best_candidate: HeterogeneousEvaluation | None = None
-        for pair in pairs:
-            candidate = _remove_pair(current=current, pair=pair, mother=mother, profile=profile, cache=cache)
-            if not candidate.is_feasible(target_power_mw):
-                continue
-            if candidate.unit_area_power_kw_m2 <= current.unit_area_power_kw_m2 + q_improvement_threshold:
-                continue
-            if best_candidate is None or candidate.unit_area_power_kw_m2 > best_candidate.unit_area_power_kw_m2:
-                best_pair = pair
-                best_candidate = candidate
-        if best_pair is None or best_candidate is None:
-            break
-        removed = tuple((int(current.original_indices[index]) for index in best_pair))
-        current = best_candidate
-        steps.append(PruneStep(removed, current))
-    return PruneOutcome(initial=initial, best=current, steps=tuple(steps))
-
-# ========================================================================
-# 来源：src/heliostat/q3/export.py
-# ========================================================================
-
-"""第三问逐镜参数、论文表和 result3.xlsx 输出。"""
-import csv
-import json
+"""第三问 result3.xlsx 提交表输出。"""
 from copy import copy
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Iterable, Sequence
-import numpy as np
 from openpyxl import load_workbook
-TARGET_ANNUAL_POWER_MW = 42.0
-
-def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    if not rows:
-        raise ValueError(f'没有可写入 {path.name} 的结果。')
-    with path.open('w', encoding='utf-8-sig', newline='') as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
 
 def write_result3_workbook(*, template_path: str | Path, output_path: str | Path, evaluation: HeterogeneousEvaluation, tower_x: float, tower_y: float) -> Path:
     """按题目模板写出塔坐标和每面镜子的异构规格、位置。"""
@@ -1866,180 +1480,844 @@ def write_result3_workbook(*, template_path: str | Path, output_path: str | Path
     workbook.close()
     return destination
 
-def _group_rows(*, mother: CampoMotherField, design: GroupDesign, evaluation: HeterogeneousEvaluation) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for group in range(6):
-        active = evaluation.group_indices == group
-        rows.append({'group': group + 1, 'mirror_count': int(np.count_nonzero(active)), 'scale': design.scales[group], 'mirror_width_m': mother.base_width * design.scales[group], 'mirror_height_m': mother.base_height * design.scales[group], 'installation_height_m': design.heights[group], 'total_area_m2': float(np.sum(evaluation.widths[active] * evaluation.heights[active]))})
-    return rows
+# ========================================================================
+# 来源：src/heliostat/q3/model.py
+# ========================================================================
 
-def _stage_rows(stages: Iterable[tuple[str, HeterogeneousEvaluation]]) -> list[dict[str, Any]]:
-    return [{'stage': name, 'profile': evaluation.profile_name, 'mirror_count': evaluation.mirror_count, 'total_area_m2': evaluation.total_area_m2, 'annual_power_mw': evaluation.annual_power_mw, 'unit_area_power_kw_m2': evaluation.unit_area_power_kw_m2} for (name, evaluation) in stages]
+"""六组正式初值、21 维设计对象和逐镜规格展开。"""
+import json
+import math
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Literal
+import numpy as np
+TowerMode = Literal['A', 'B']
 
-def write_question3_results(*, output_dir: str | Path, mother: CampoMotherField, design: GroupDesign, evaluation: HeterogeneousEvaluation, result3_template: str | Path, stages: Iterable[tuple[str, HeterogeneousEvaluation]]=(), calibration: dict[str, Any] | None=None) -> dict[str, Path]:
+@dataclass(frozen=True)
+class RefineDesign:
+    """保留六区阶梯结构的完整候选。"""
+    tower_mode: TowerMode
+    tower_y: float
+    initial_spacing: float
+    spacing_growth: float
+    widths: tuple[float, ...]
+    mirror_heights: tuple[float, ...]
+    installation_heights: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        if self.tower_mode not in ('A', 'B'):
+            raise ValueError('tower_mode 必须为 A 或 B。')
+        for (name, values) in (('widths', self.widths), ('mirror_heights', self.mirror_heights), ('installation_heights', self.installation_heights)):
+            if len(values) != GROUP_COUNT:
+                raise ValueError(f'{name} 必须包含六个值。')
+        values = (self.tower_y, self.initial_spacing, self.spacing_growth, *self.widths, *self.mirror_heights, *self.installation_heights)
+        if not all((math.isfinite(value) for value in values)):
+            raise ValueError('候选参数必须全部为有限数。')
+
+    def parameter(self, name: str) -> float:
+        if name in ('tower_y', 'initial_spacing', 'spacing_growth'):
+            return float(getattr(self, name))
+        prefix = name[0]
+        try:
+            group = int(name[1:]) - 1
+        except (ValueError, IndexError) as exc:
+            raise KeyError(name) from exc
+        if not 0 <= group < GROUP_COUNT:
+            raise KeyError(name)
+        values = {'w': self.widths, 'h': self.mirror_heights, 'H': self.installation_heights}.get(prefix)
+        if values is None:
+            raise KeyError(name)
+        return float(values[group])
+
+    def with_parameter(self, name: str, value: float) -> RefineDesign:
+        if name in ('tower_y', 'initial_spacing', 'spacing_growth'):
+            return replace(self, **{name: float(value)})
+        prefix = name[0]
+        try:
+            group = int(name[1:]) - 1
+        except (ValueError, IndexError) as exc:
+            raise KeyError(name) from exc
+        attribute = {'w': 'widths', 'h': 'mirror_heights', 'H': 'installation_heights'}.get(prefix)
+        if attribute is None or not 0 <= group < GROUP_COUNT:
+            raise KeyError(name)
+        values = list(getattr(self, attribute))
+        values[group] = float(value)
+        return replace(self, **{attribute: tuple(values)})
+
+    def to_dict(self) -> dict[str, object]:
+        return {'tower_mode': self.tower_mode, 'tower_x_m': 0.0, 'tower_y_m': self.tower_y, 'initial_spacing_m': self.initial_spacing, 'spacing_growth_m_per_ring': self.spacing_growth, 'widths_m': list(self.widths), 'mirror_heights_m': list(self.mirror_heights), 'installation_heights_m': list(self.installation_heights)}
+
+@dataclass(frozen=True)
+class RefineBaseline:
+    mother: CampoMotherField
+    design: RefineDesign
+    expected_mirror_count: int
+    expected_total_area_m2: float
+    expected_power_mw: float
+    expected_q_kw_m2: float
+    expected_annual: dict[str, float]
+
+    @property
+    def parameters(self) -> CampoParameters:
+        return self.mother.parameters
+
+@dataclass(frozen=True)
+class RefineField:
+    """某一塔位语义和 Campo 参数下的前 28 个有效环。"""
+    coordinates: np.ndarray
+    ring_indices: np.ndarray
+    group_indices: np.ndarray
+    original_indices: np.ndarray
+    mirror_set_hash: str
+    outer_clipped_count: int
+    geometry_center_y: float
+
+    @property
+    def mirror_count(self) -> int:
+        return int(self.coordinates.shape[0])
+
+    @property
+    def group_counts(self) -> tuple[int, ...]:
+        return tuple((int(np.count_nonzero(self.group_indices == group)) for group in range(GROUP_COUNT)))
+
+def load_baseline(*, q2_summary_path: str | Path, six_group_summary_path: str | Path) -> RefineBaseline:
+    """从正式结果读取六组初值，禁止重新估计或手抄参数。"""
+    mother = build_campo_mother_field(q2_summary_path)
+    payload = json.loads(Path(six_group_summary_path).read_text(encoding='utf-8'))
+    group_payload = payload.get('group_design', {}).get('groups')
+    if not isinstance(group_payload, list) or len(group_payload) != GROUP_COUNT:
+        raise ValueError('六组正式摘要缺少完整的 groups 数据。')
+    ordered = sorted(group_payload, key=lambda item: int(item['group']))
+    design = RefineDesign(tower_mode='A', tower_y=float(payload['tower']['y_m']), initial_spacing=float(mother.parameters.initial_spacing), spacing_growth=float(mother.parameters.spacing_growth), widths=tuple((float(item['mirror_width_m']) for item in ordered)), mirror_heights=tuple((float(item['mirror_height_m']) for item in ordered)), installation_heights=tuple((float(item['installation_height_m']) for item in ordered)))
+    annual = {key: float(value) for (key, value) in payload['annual'].items()}
+    return RefineBaseline(mother=mother, design=design, expected_mirror_count=int(payload['mirror_count']), expected_total_area_m2=float(payload['total_area_m2']), expected_power_mw=float(annual['field_output_mw']), expected_q_kw_m2=float(annual['unit_area_output_kw_m2']), expected_annual=annual)
+
+def expand_specifications(field: RefineField, design: RefineDesign) -> ExpandedSpecifications:
+    groups = field.group_indices
+    widths = np.asarray(design.widths, dtype=float)[groups]
+    heights = np.asarray(design.mirror_heights, dtype=float)[groups]
+    installation = np.asarray(design.installation_heights, dtype=float)[groups]
+    return ExpandedSpecifications(widths=np.asarray(widths, dtype=float), heights=np.asarray(heights, dtype=float), installation_heights=np.asarray(installation, dtype=float), areas=np.asarray(widths * heights, dtype=float))
+
+# ========================================================================
+# 来源：src/heliostat/q3/tower_modes.py
+# ========================================================================
+
+"""塔位模式 A/B 和动态 Campo 前缀构造。"""
+import hashlib
+from dataclasses import replace
+import numpy as np
+RING_COUNT = 28
+
+def _group_for_ring(ring_index: int) -> int:
+    for (group, (start, stop)) in enumerate(GROUP_RING_RANGES):
+        if start <= ring_index <= stop:
+            return group
+    raise ValueError(f'圆环 {ring_index} 不属于六区。')
+
+def _membership_hash(*, layout: GeneratedLayout, geometry_center_y: float) -> str:
+    digest = hashlib.sha256()
+    for (ring_index, ring) in enumerate(layout.rings, start=1):
+        angles = np.mod(np.arctan2(ring.coordinates[:, 0], ring.coordinates[:, 1] - geometry_center_y), 2.0 * np.pi)
+        digest.update(np.asarray((ring_index, ring.nominal_count), dtype='<i8').tobytes())
+        digest.update(np.round(angles, 10).astype('<f8').tobytes())
+    return digest.hexdigest()
+
+def build_refine_field(baseline: RefineBaseline, design: RefineDesign) -> RefineField:
+    """按单一塔位语义重建 Campo，不在轨迹内切换语义。"""
+    geometry_center_y = design.tower_y if design.tower_mode == 'A' else baseline.design.tower_y
+    parameters = replace(baseline.parameters, tower_y=geometry_center_y, initial_spacing=design.initial_spacing, spacing_growth=design.spacing_growth)
+    generated = generate_campo_layout(parameters)
+    if len(generated.rings) < RING_COUNT:
+        raise ValueError(f'候选只生成 {len(generated.rings)} 个有效环，不能保留前 28 环。')
+    layout = GeneratedLayout('campo', generated.rings[:RING_COUNT])
+    coordinates: list[np.ndarray] = []
+    rings: list[np.ndarray] = []
+    groups: list[np.ndarray] = []
+    originals: list[np.ndarray] = []
+    cursor = 0
+    clipped = 0
+    for (display_index, ring) in enumerate(layout.rings, start=1):
+        count = ring.mirror_count
+        coordinates.append(np.asarray(ring.coordinates, dtype=float))
+        rings.append(np.full(count, display_index, dtype=np.int64))
+        groups.append(np.full(count, _group_for_ring(display_index), dtype=np.int64))
+        originals.append(np.arange(cursor, cursor + count, dtype=np.int64))
+        cursor += count
+        clipped += ring.nominal_count - count
+    return RefineField(coordinates=np.concatenate(coordinates), ring_indices=np.concatenate(rings), group_indices=np.concatenate(groups), original_indices=np.concatenate(originals), mirror_set_hash=_membership_hash(layout=layout, geometry_center_y=geometry_center_y), outer_clipped_count=int(clipped), geometry_center_y=float(geometry_center_y))
+
+# ========================================================================
+# 来源：src/heliostat/q3/evaluate.py
+# ========================================================================
+
+"""统一几何预检、四级精度和六区候选评价。"""
+from dataclasses import asdict, dataclass, replace
+
+@dataclass(frozen=True)
+class RefineEvaluation:
+    design: RefineDesign
+    field: RefineField
+    specifications: ExpandedSpecifications
+    raw: HeterogeneousEvaluation
+
+    @property
+    def profile_name(self) -> str:
+        return self.raw.profile_name
+
+    @property
+    def mirror_count(self) -> int:
+        return self.raw.mirror_count
+
+    @property
+    def total_area_m2(self) -> float:
+        return self.raw.total_area_m2
+
+    @property
+    def annual_power_mw(self) -> float:
+        return self.raw.annual_power_mw
+
+    @property
+    def unit_area_power_kw_m2(self) -> float:
+        return self.raw.unit_area_power_kw_m2
+
+    @property
+    def geometry(self) -> HeterogeneousGeometryCheck:
+        return self.raw.geometry
+
+    def is_feasible(self, target_power_mw: float=42.0) -> bool:
+        return self.raw.is_feasible(target_power_mw)
+
+def coarse_profile() -> EvaluationProfile:
+    return replace(_coarse_profile(), name='q3-six-refine-coarse')
+
+def medium_profile() -> EvaluationProfile:
+    return replace(_medium_profile(), name='q3-six-refine-medium')
+
+def formal_profile() -> EvaluationProfile:
+    return replace(_formal_profile(), name='q3-six-refine-formal')
+
+def dense_profile(*, neighbor_radius_m: float) -> EvaluationProfile:
+    profile = _dense_profile()
+    return replace(profile, name=f'q3-six-refine-dense-{neighbor_radius_m:g}m', solver=replace(profile.solver, neighbor_radius_m=neighbor_radius_m))
+
+def smoke_profile() -> EvaluationProfile:
+    return replace(_smoke_profile(), name='q3-six-refine-smoke')
+
+def _field_config(baseline: RefineBaseline, design: RefineDesign) -> FieldConfig:
+    parameters = baseline.parameters
+    return replace(FieldConfig(), field_radius=parameters.field_radius, exclusion_radius=parameters.exclusion_radius, tower_x=parameters.tower_x, tower_y=design.tower_y, mirror_width=parameters.mirror_width, mirror_height=parameters.mirror_height, mirror_center_z=parameters.installation_height)
+
+def prepare_candidate(*, baseline: RefineBaseline, design: RefineDesign) -> tuple[RefineField, ExpandedSpecifications, HeterogeneousGeometryCheck]:
+    field = build_refine_field(baseline, design)
+    specifications = expand_specifications(field, design)
+    check = validate_heterogeneous_field(coordinates=field.coordinates, widths=specifications.widths, heights=specifications.heights, installation_heights=specifications.installation_heights, tower_x=baseline.parameters.tower_x, tower_y=design.tower_y, field_radius=baseline.parameters.field_radius, exclusion_radius=baseline.parameters.exclusion_radius, safety_epsilon=baseline.parameters.safety_epsilon)
+    return (field, specifications, check)
+
+def evaluate_design(*, baseline: RefineBaseline, design: RefineDesign, profile: EvaluationProfile, cache: EvaluationCache | None=None) -> RefineEvaluation:
+    (field, specifications, check) = prepare_candidate(baseline=baseline, design=design)
+    if not check.valid:
+        raise ValueError(check.reason or '六区微调候选几何不合法。')
+    raw = _evaluate_specifications(coordinates=field.coordinates, specifications=specifications, ring_indices=field.ring_indices, group_indices=field.group_indices, original_indices=field.original_indices, field_config=_field_config(baseline, design), profile=profile, safety_epsilon=baseline.parameters.safety_epsilon, cache=cache)
+    return RefineEvaluation(design=design, field=field, specifications=specifications, raw=raw)
+
+def metrics(evaluation: RefineEvaluation, *, target_power_mw: float=42.0) -> dict[str, object]:
+    annual = asdict(evaluation.raw.solution.annual_result)
+    return {'profile': evaluation.profile_name, 'tower_mode': evaluation.design.tower_mode, 'tower_x_m': 0.0, 'tower_y_m': evaluation.design.tower_y, 'mirror_count': evaluation.mirror_count, 'mirror_set_hash': evaluation.field.mirror_set_hash, 'outer_clipped_count': evaluation.field.outer_clipped_count, 'total_area_m2': evaluation.total_area_m2, 'annual_power_mw': evaluation.annual_power_mw, 'power_margin_mw': evaluation.annual_power_mw - target_power_mw, 'unit_area_power_kw_m2': evaluation.unit_area_power_kw_m2, **annual}
+__all__ = ('EvaluationCache', 'RefineEvaluation', 'coarse_profile', 'dense_profile', 'evaluate_design', 'formal_profile', 'medium_profile', 'metrics', 'prepare_candidate', 'smoke_profile')
+
+# ========================================================================
+# 来源：src/heliostat/q3/sensitivity.py
+# ========================================================================
+
+"""六区 18 个规格变量的正负扰动与活跃变量筛选。"""
+from dataclasses import dataclass
+SPECIFICATION_VARIABLES = tuple((f'{prefix}{group}' for prefix in ('w', 'h', 'H') for group in range(1, 7)))
+
+@dataclass(frozen=True)
+class Perturbation:
+    parameter: str
+    group_id: int
+    direction: str
+    old_value: float
+    new_value: float
+    design: RefineDesign
+
+def specification_perturbations(design: RefineDesign, *, step_m: float=0.1) -> tuple[Perturbation, ...]:
+    if step_m <= 0.0:
+        raise ValueError('敏感性扰动步长必须大于 0。')
+    candidates: list[Perturbation] = []
+    for parameter in SPECIFICATION_VARIABLES:
+        old = design.parameter(parameter)
+        for (direction, delta) in (('-', -step_m), ('+', step_m)):
+            new = old + delta
+            candidates.append(Perturbation(parameter=parameter, group_id=int(parameter[1:]), direction=direction, old_value=old, new_value=new, design=design.with_parameter(parameter, new)))
+    return tuple(candidates)
+
+def select_formal_directions(rows: list[dict[str, object]], *, limit: int=6) -> list[dict[str, object]]:
+    """按中精度提升选出至多六个不同变量的最佳方向。"""
+    eligible = [row for row in rows if bool(row.get('legal')) and row.get('medium_q') is not None and (float(row['medium_power']) >= 42.0)]
+    eligible.sort(key=lambda row: float(row['delta_q']), reverse=True)
+    selected: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for row in eligible:
+        parameter = str(row['parameter'])
+        if parameter in seen:
+            continue
+        selected.append(row)
+        seen.add(parameter)
+        if len(selected) >= limit:
+            break
+    return selected
+
+def active_from_formal(rows: list[dict[str, object]], *, reference_q: float, target_power_mw: float=42.0, threshold: float=1e-08) -> tuple[str, ...]:
+    active = {str(row['parameter']) for row in rows if row.get('formal_q') is not None and float(row['formal_power']) >= target_power_mw and (float(row['formal_q']) > reference_q + threshold)}
+    return tuple((parameter for parameter in SPECIFICATION_VARIABLES if parameter in active))
+
+# ========================================================================
+# 来源：src/heliostat/q3/search.py
+# ========================================================================
+
+"""活跃变量的分块变步长局部搜索。"""
+from dataclasses import dataclass
+from typing import Callable
+Evaluator = Callable[[RefineDesign], RefineEvaluation | None]
+BLOCK_ORDER = ('tower', 'campo', 'width', 'height', 'installation')
+STEP_LEVELS = {'tower_y': (0.5, 0.25, 0.1), 'initial_spacing': (0.2, 0.1, 0.05), 'spacing_growth': (0.02, 0.01, 0.005), 'w': (0.1, 0.05, 0.02), 'h': (0.1, 0.05, 0.02), 'H': (0.1, 0.05, 0.02)}
+
+@dataclass(frozen=True)
+class SearchOutcome:
+    initial_design: RefineDesign
+    initial_evaluation: RefineEvaluation
+    best_design: RefineDesign
+    best_evaluation: RefineEvaluation
+    trace: tuple[dict[str, object], ...]
+    evaluated_candidates: int
+
+def parameter_block(parameter: str) -> str:
+    if parameter == 'tower_y':
+        return 'tower'
+    if parameter in ('initial_spacing', 'spacing_growth'):
+        return 'campo'
+    return {'w': 'width', 'h': 'height', 'H': 'installation'}[parameter[0]]
+
+def _steps(parameter: str) -> tuple[float, ...]:
+    if parameter in STEP_LEVELS:
+        return STEP_LEVELS[parameter]
+    return STEP_LEVELS[parameter[0]]
+
+def _better(candidate: RefineEvaluation, reference: RefineEvaluation, *, target_power_mw: float, threshold: float) -> bool:
+    candidate_feasible = candidate.is_feasible(target_power_mw)
+    reference_feasible = reference.is_feasible(target_power_mw)
+    if candidate_feasible != reference_feasible:
+        return candidate_feasible
+    if candidate_feasible:
+        return candidate.unit_area_power_kw_m2 > reference.unit_area_power_kw_m2 + threshold
+    return candidate.annual_power_mw > reference.annual_power_mw + 1e-06
+
+def coordinate_search(*, initial_design: RefineDesign, initial_evaluation: RefineEvaluation, active_variables: tuple[str, ...], evaluator: Evaluator, baseline_q_kw_m2: float, maximum_sweeps: int=2, target_power_mw: float=42.0, move_q_threshold: float=1e-08) -> SearchOutcome:
+    """按塔位、Campo、宽、高、安装高顺序执行最多两轮回扫。"""
+    if maximum_sweeps < 0 or maximum_sweeps > 2:
+        raise ValueError('联合回扫轮数必须位于 0 到 2。')
+    current_design = initial_design
+    current_evaluation = initial_evaluation
+    level_by_block = {block: 0 for block in BLOCK_ORDER}
+    trace: list[dict[str, object]] = []
+    evaluated = 0
+    for sweep in range(1, maximum_sweeps + 1):
+        sweep_improved = False
+        for block in BLOCK_ORDER:
+            parameters = tuple((parameter for parameter in active_variables if parameter_block(parameter) == block))
+            if not parameters:
+                continue
+            level = level_by_block[block]
+            ranked: list[tuple[str, float, float, RefineDesign, RefineEvaluation]] = []
+            for parameter in parameters:
+                step = _steps(parameter)[level]
+                old = current_design.parameter(parameter)
+                for sign in (-1.0, 1.0):
+                    new = old + sign * step
+                    candidate_design = current_design.with_parameter(parameter, new)
+                    evaluation = evaluator(candidate_design)
+                    if evaluation is None:
+                        continue
+                    evaluated += 1
+                    ranked.append((parameter, old, new, candidate_design, evaluation))
+            improving = [item for item in ranked if _better(item[4], current_evaluation, target_power_mw=target_power_mw, threshold=move_q_threshold)]
+            if improving:
+                (parameter, old, new, design, evaluation) = max(improving, key=lambda item: (int(item[4].is_feasible(target_power_mw)), item[4].unit_area_power_kw_m2 if item[4].is_feasible(target_power_mw) else item[4].annual_power_mw))
+                previous = current_evaluation
+                current_design = design
+                current_evaluation = evaluation
+                sweep_improved = True
+                trace.append({'sweep_id': sweep, 'parameter_block': block, 'parameter': parameter, 'old_value': old, 'new_value': new, 'step_size': abs(new - old), 'evaluation_level': evaluation.profile_name, 'power': evaluation.annual_power_mw, 'power_margin': evaluation.annual_power_mw - target_power_mw, 'total_area': evaluation.total_area_m2, 'q': evaluation.unit_area_power_kw_m2, 'delta_q_from_previous': evaluation.unit_area_power_kw_m2 - previous.unit_area_power_kw_m2, 'delta_q_from_six': evaluation.unit_area_power_kw_m2 - baseline_q_kw_m2, 'accepted': True})
+            else:
+                level_by_block[block] = min(level + 1, 2)
+        if not sweep_improved:
+            break
+    return SearchOutcome(initial_design=initial_design, initial_evaluation=initial_evaluation, best_design=current_design, best_evaluation=current_evaluation, trace=tuple(trace), evaluated_candidates=evaluated)
+
+# ========================================================================
+# 来源：src/heliostat/q3/export.py
+# ========================================================================
+
+"""六区微调实验的 01--14 号数据与提交表导出。"""
+import csv
+import json
+from dataclasses import asdict
+from pathlib import Path
+from typing import Iterable
+
+def _json(path: Path, payload: object) -> Path:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    return path
+
+def _csv(path: Path, rows: Iterable[dict[str, object]]) -> Path:
+    records = list(rows)
+    if not records:
+        path.write_text('\n', encoding='utf-8-sig')
+        return path
+    fields: list[str] = []
+    for record in records:
+        for key in record:
+            if key not in fields:
+                fields.append(key)
+    with path.open('w', encoding='utf-8-sig', newline='') as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(records)
+    return path
+
+def _comparison_record(label: str, evaluation: RefineEvaluation, *, target_power_mw: float) -> dict[str, object]:
+    return {'scheme': label, **metrics(evaluation, target_power_mw=target_power_mw)}
+
+def write_results(*, output_dir: str | Path, baseline: RefineBaseline, regression: dict[str, object], tower_rows: list[dict[str, object]], geometry_rows: list[dict[str, object]], sensitivity_rows: list[dict[str, object]], active_payload: dict[str, object], search_trace: Iterable[dict[str, object]], formal_rows: list[dict[str, object]], baseline_formal: RefineEvaluation, attempted_formal: RefineEvaluation, selected_formal: RefineEvaluation, selected_design: RefineDesign, dense_payload: dict[str, object], result3_template: str | Path, target_power_mw: float, decision: str) -> dict[str, Path]:
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
-    coordinate_rows = [{'mirror_id': index + 1, 'original_mirror_id': int(evaluation.original_indices[index]) + 1, 'ring_index': int(evaluation.ring_indices[index]), 'group': int(evaluation.group_indices[index]) + 1, 'mirror_width_m': float(evaluation.widths[index]), 'mirror_height_m': float(evaluation.heights[index]), 'x_m': float(evaluation.coordinates[index, 0]), 'y_m': float(evaluation.coordinates[index, 1]), 'z_m': float(evaluation.installation_heights[index])} for index in range(evaluation.mirror_count)]
-    monthly_rows = [asdict(record) for record in evaluation.solution.monthly_results]
-    mirror_rows = [{**asdict(record), 'original_mirror_id': int(evaluation.original_indices[index]) + 1, 'ring_index': int(evaluation.ring_indices[index]), 'group': int(evaluation.group_indices[index]) + 1, 'mirror_width_m': float(evaluation.widths[index]), 'mirror_height_m': float(evaluation.heights[index]), 'installation_height_m': float(evaluation.installation_heights[index]), 'mirror_area_m2': float(evaluation.widths[index] * evaluation.heights[index])} for (index, record) in enumerate(evaluation.solution.mirror_annual_results)]
-    annual = asdict(evaluation.solution.annual_result)
-    groups = _group_rows(mother=mother, design=design, evaluation=evaluation)
-    stage_data = _stage_rows(stages)
-    stages_path = destination / '02_分阶段方案比较.json'
-    coordinates_path = destination / '03_最终逐镜参数与坐标.csv'
-    monthly_path = destination / '04_月平均计算结果.csv'
-    annual_path = destination / '05_年平均计算结果.json'
-    mirror_path = destination / '06_单镜年平均结果.csv'
-    summary_path = destination / '07_最终方案摘要.json'
-    table_path = destination / '08_论文结果与验证表.md'
-    workbook_path = destination / '10_第三问提交结果.xlsx'
-    stages_path.write_text(json.dumps(stage_data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    _write_csv(coordinates_path, coordinate_rows)
-    _write_csv(monthly_path, monthly_rows)
-    _write_csv(mirror_path, mirror_rows)
-    annual_path.write_text(json.dumps(annual, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    summary = {'layout': 'fixed-q2-campo-heterogeneous', 'annual_power_constraint_mw': TARGET_ANNUAL_POWER_MW, 'annual_power_margin_mw': evaluation.annual_power_mw - TARGET_ANNUAL_POWER_MW, 'constraint_satisfied': evaluation.is_feasible(TARGET_ANNUAL_POWER_MW), 'tower': {'x_m': mother.parameters.tower_x, 'y_m': mother.parameters.tower_y}, 'mirror_count': evaluation.mirror_count, 'total_area_m2': evaluation.total_area_m2, 'group_design': {'scales': list(design.scales), 'installation_heights_m': list(design.heights), 'groups': groups}, 'geometry': asdict(evaluation.geometry), 'annual': annual, 'calibration': calibration}
-    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    lines = ['# 第三问结果与验证表', '', '## 表 1 功率约束与优化目标', '', '| 年平均功率下限 (MW) | 年平均功率 (MW) | 功率余量 (MW) | 总镜面面积 (m²) | 单位面积年平均输出 (kW/m²) | 是否满足约束 |', '| ---: | ---: | ---: | ---: | ---: | :---: |', f"| {TARGET_ANNUAL_POWER_MW:.6f} | {evaluation.annual_power_mw:.6f} | {evaluation.annual_power_mw - TARGET_ANNUAL_POWER_MW:.6f} | {evaluation.total_area_m2:.3f} | {evaluation.unit_area_power_kw_m2:.6f} | {('是' if evaluation.is_feasible() else '否')} |", '', '## 表 2 六组最终规格', '', '| 组别 | 镜子数 | 尺度 | 宽度 (m) | 高度 (m) | 安装高度 (m) | 组总面积 (m²) |', '| ---: | ---: | ---: | ---: | ---: | ---: | ---: |']
-    for row in groups:
-        lines.append(f"| G{row['group']} | {row['mirror_count']} | {row['scale']:.6f} | {row['mirror_width_m']:.6f} | {row['mirror_height_m']:.6f} | {row['installation_height_m']:.6f} | {row['total_area_m2']:.3f} |")
-    lines.extend(['', '## 表 3 分阶段消融', '', '| 阶段 | 评价精度 | 镜子数 | 总面积 (m²) | 年平均功率 (MW) | 单位面积输出 (kW/m²) |', '| --- | --- | ---: | ---: | ---: | ---: |'])
-    for row in stage_data:
-        lines.append(f"| {row['stage']} | {row['profile']} | {row['mirror_count']} | {row['total_area_m2']:.3f} | {row['annual_power_mw']:.6f} | {row['unit_area_power_kw_m2']:.6f} |")
-    geometry = evaluation.geometry
-    lines.extend(['', '## 表 4 异构几何约束复核', '', '| 检查项 | 实际值 | 约束 | 结果 |', '| --- | ---: | ---: | :---: |', f"| 最小镜心距离 (m) | {geometry.minimum_center_distance_m:.9f} | - | {('通过' if geometry.valid else '未通过')} |", f"| 最小异构宽度安全余量 (m) | {geometry.minimum_width_clearance_m:.9f} | ≥ 0.010000000 | {('通过' if geometry.minimum_width_clearance_m >= 0.01 - 1e-09 else '未通过')} |", f"| 最大场地半径 (m) | {geometry.maximum_field_radius_m:.6f} | ≤ 350 | {('通过' if geometry.maximum_field_radius_m <= 350.0 + 1e-09 else '未通过')} |", f"| 最小塔距 (m) | {geometry.minimum_tower_distance_m:.6f} | ≥ 100 | {('通过' if geometry.minimum_tower_distance_m >= 100.0 - 1e-09 else '未通过')} |", f"| 最小不触地余量 (m) | {geometry.minimum_ground_clearance_m:.6f} | ≥ 0 | {('通过' if geometry.minimum_ground_clearance_m >= -1e-09 else '未通过')} |", '', '## 表 5 每月 21 日平均光学效率及输出功率', '', '| 月份 | 光学效率 | 余弦效率 | 阴影遮挡效率 | 截断效率 | 输出热功率 (MW) | 单位面积输出 (kW/m²) |', '| ---: | ---: | ---: | ---: | ---: | ---: | ---: |'])
-    for record in evaluation.solution.monthly_results:
-        lines.append(f'| {record.month} | {record.average_optical_efficiency:.6f} | {record.average_cosine_efficiency:.6f} | {record.average_shadow_blocking_efficiency:.6f} | {record.average_truncation_efficiency:.6f} | {record.field_output_mw:.6f} | {record.unit_area_output_kw_m2:.6f} |')
-    table_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-    write_result3_workbook(template_path=result3_template, output_path=workbook_path, evaluation=evaluation, tower_x=mother.parameters.tower_x, tower_y=mother.parameters.tower_y)
-    return {'stages': stages_path, 'coordinates': coordinates_path, 'monthly': monthly_path, 'annual': annual_path, 'mirror_annual': mirror_path, 'summary': summary_path, 'paper_table': table_path, 'result3': workbook_path}
+    paths: dict[str, Path] = {}
+    paths['regression'] = _json(destination / '02_六组回归结果.json', regression)
+    paths['tower'] = _csv(destination / '03_塔位两种语义扫描.csv', tower_rows)
+    paths['geometry_scan'] = _csv(destination / '04_Campo几何粗扫.csv', geometry_rows)
+    paths['sensitivity'] = _csv(destination / '05_规格参数敏感性.csv', sensitivity_rows)
+    paths['active'] = _json(destination / '06_活跃变量集合.json', active_payload)
+    paths['trace'] = _csv(destination / '07_局部搜索轨迹.csv', search_trace)
+    paths['formal_candidates'] = _csv(destination / '08_正式候选比较.csv', formal_rows)
+    group_rows = []
+    for group in range(6):
+        active = selected_formal.field.group_indices == group
+        group_rows.append({'group': group + 1, 'ring_start': (1, 2, 6, 12, 15, 21)[group], 'ring_stop': (1, 5, 11, 14, 20, 28)[group], 'mirror_count': int(active.sum()), 'mirror_width_m': selected_design.widths[group], 'mirror_height_m': selected_design.mirror_heights[group], 'installation_height_m': selected_design.installation_heights[group], 'group_area_m2': float(selected_formal.specifications.areas[active].sum())})
+    paths['groups'] = _csv(destination / '09_最终六区参数.csv', group_rows)
+    mirror_rows = []
+    for index in range(selected_formal.mirror_count):
+        mirror_rows.append({'mirror_id': index + 1, 'original_mirror_id': int(selected_formal.field.original_indices[index]) + 1, 'ring_index': int(selected_formal.field.ring_indices[index]), 'group': int(selected_formal.field.group_indices[index]) + 1, 'mirror_width_m': float(selected_formal.specifications.widths[index]), 'mirror_height_m': float(selected_formal.specifications.heights[index]), 'x_m': float(selected_formal.field.coordinates[index, 0]), 'y_m': float(selected_formal.field.coordinates[index, 1]), 'z_m': float(selected_formal.specifications.installation_heights[index])})
+    paths['mirrors'] = _csv(destination / '10_最终逐镜参数与坐标.csv', mirror_rows)
+    comparison = {'decision': decision, 'target_power_mw': target_power_mw, 'baseline': _comparison_record('six_group_baseline', baseline_formal, target_power_mw=target_power_mw), 'attempted_candidate': _comparison_record('refined_candidate', attempted_formal, target_power_mw=target_power_mw), 'selected': _comparison_record('selected_final', selected_formal, target_power_mw=target_power_mw), 'selected_design': selected_design.to_dict()}
+    paths['formal'] = _json(destination / '11_正式结果比较.json', comparison)
+    paths['dense'] = _json(destination / '12_加密验收比较.json', dense_payload)
+    paths['geometry'] = _json(destination / '13_几何约束验证.json', {'valid': selected_formal.geometry.valid, 'details': asdict(selected_formal.geometry), 'mirror_set_hash': selected_formal.field.mirror_set_hash, 'outer_clipped_count': selected_formal.field.outer_clipped_count, 'group_counts': list(selected_formal.field.group_counts)})
+    workbook = destination / '14_第三问最终提交结果.xlsx'
+    write_result3_workbook(template_path=result3_template, output_path=workbook, evaluation=selected_formal.raw, tower_x=baseline.parameters.tower_x, tower_y=selected_design.tower_y)
+    paths['workbook'] = workbook
+    delta_q = attempted_formal.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2
+    lines = ['# 第三问六区参数微调结果与验证表', '', f'最终判定：{decision}。', '', '## 表 S3-1 正式精度比较', '', '| 方案 | 镜子数 | 年平均功率 (MW) | 功率余量 (MW) | 总面积 (m²) | 单位面积输出 (kW/m²) |', '| --- | ---: | ---: | ---: | ---: | ---: |', f'| 原六组 | {baseline_formal.mirror_count} | {baseline_formal.annual_power_mw:.9f} | {baseline_formal.annual_power_mw - target_power_mw:.9f} | {baseline_formal.total_area_m2:.6f} | {baseline_formal.unit_area_power_kw_m2:.9f} |', f'| 微调候选 | {attempted_formal.mirror_count} | {attempted_formal.annual_power_mw:.9f} | {attempted_formal.annual_power_mw - target_power_mw:.9f} | {attempted_formal.total_area_m2:.6f} | {attempted_formal.unit_area_power_kw_m2:.9f} |', '', f'正式精度候选相对原六组的 $\\Delta q={delta_q:.9f}\\ \\mathrm{{kW/m^2}}$。', '', '## 表 S3-2 加密精度比较', '', '| 邻镜半径 (m) | 原六组功率 (MW) | 微调候选功率 (MW) | 原六组 q (kW/m²) | 微调候选 q (kW/m²) | $\\Delta q$ (kW/m²) |', '| ---: | ---: | ---: | ---: | ---: | ---: |']
+    for radius in ('80', '100'):
+        before = dense_payload.get('baseline', {}).get(radius)
+        after = dense_payload.get('candidate', {}).get(radius)
+        if before is not None and after is not None:
+            lines.append(f"| {radius} | {before['annual_power_mw']:.9f} | {after['annual_power_mw']:.9f} | {before['unit_area_power_kw_m2']:.9f} | {after['unit_area_power_kw_m2']:.9f} | {after['unit_area_power_kw_m2'] - before['unit_area_power_kw_m2']:.9f} |")
+    lines.extend(('', '## 表 S3-3 最终六区规格', '', '| 分区 | 镜子数 | 宽度 (m) | 高度 (m) | 安装高度 (m) |', '| ---: | ---: | ---: | ---: | ---: |'))
+    for row in group_rows:
+        lines.append(f"| G{row['group']} | {row['mirror_count']} | {row['mirror_width_m']:.6f} | {row['mirror_height_m']:.6f} | {row['installation_height_m']:.6f} |")
+    lines.extend(('', '## 验收说明', '', '塔位模式 A 与 B 分开扫描；搜索轨迹固定使用已选模式。中精度仅用于排序和局部接受，最终判定来自同口径正式精度及 80/100 m 加密比较。', ''))
+    table = destination / '15_论文结果与验证表.md'
+    table.write_text('\n'.join(lines), encoding='utf-8')
+    paths['table'] = table
+    return paths
 
-def write_dense_validation(*, output_dir: str | Path, evaluation: HeterogeneousEvaluation, profile: EvaluationProfile, sensitivity_evaluations: Sequence[tuple[EvaluationProfile, HeterogeneousEvaluation]]=()) -> Path:
-    destination = Path(output_dir)
-    path = destination / '09_高精度加密验证.json'
-    evaluations = ((profile, evaluation), *sensitivity_evaluations)
+# ========================================================================
+# 来源：src/heliostat/q3/plot.py
+# ========================================================================
 
-    def validation_record(item_profile: EvaluationProfile, item_evaluation: HeterogeneousEvaluation) -> dict[str, Any]:
-        return {'profile': {'months': len(item_profile.months), 'solar_times_per_month': len(item_profile.solar_times), 'shadow_grid_size': item_profile.solver.shadow_grid_size, 'truncation_rays': item_profile.solver.truncation_rays, 'neighbor_radius_m': item_profile.solver.neighbor_radius_m}, 'annual_power_mw': item_evaluation.annual_power_mw, 'annual_power_margin_mw': item_evaluation.annual_power_mw - TARGET_ANNUAL_POWER_MW, 'unit_area_power_kw_m2': item_evaluation.unit_area_power_kw_m2, 'constraint_satisfied': item_evaluation.is_feasible()}
-    payload = {'profile': {'months': len(profile.months), 'solar_times_per_month': len(profile.solar_times), 'shadow_grid_size': profile.solver.shadow_grid_size, 'truncation_rays': profile.solver.truncation_rays, 'neighbor_radius_m': profile.solver.neighbor_radius_m}, 'mirror_count': evaluation.mirror_count, 'total_area_m2': evaluation.total_area_m2, 'annual_power_constraint_mw': TARGET_ANNUAL_POWER_MW, 'annual_power_mw': evaluation.annual_power_mw, 'annual_power_margin_mw': evaluation.annual_power_mw - TARGET_ANNUAL_POWER_MW, 'unit_area_power_kw_m2': evaluation.unit_area_power_kw_m2, 'constraint_satisfied': evaluation.is_feasible(), 'neighbor_radius_sensitivity': [validation_record(item_profile, item_evaluation) for (item_profile, item_evaluation) in evaluations]}
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    table_path = destination / '08_论文结果与验证表.md'
-    lines = ['', '## 表 6 高精度加密与邻域敏感性验证', '', '| 阴影网格 | 截断光线 | 邻镜半径 (m) | 年平均功率 (MW) | 功率余量 (MW) | 单位面积输出 (kW/m²) | 是否满足约束 |', '| ---: | ---: | ---: | ---: | ---: | ---: | :---: |']
-    for (item_profile, item_evaluation) in evaluations:
-        lines.append(f"| {item_profile.solver.shadow_grid_size}×{item_profile.solver.shadow_grid_size} | {item_profile.solver.truncation_rays} | {item_profile.solver.neighbor_radius_m:.0f} | {item_evaluation.annual_power_mw:.6f} | {item_evaluation.annual_power_mw - TARGET_ANNUAL_POWER_MW:.6f} | {item_evaluation.unit_area_power_kw_m2:.6f} | {('是' if item_evaluation.is_feasible() else '否')} |")
-    table_content = table_path.read_text(encoding='utf-8')
-    marker = '\n## 表 6 '
-    if marker in table_content:
-        table_content = table_content.split(marker, maxsplit=1)[0].rstrip()
-    table_path.write_text(table_content + '\n' + '\n'.join(lines) + '\n', encoding='utf-8')
+"""补充方案要求的三张结果图。"""
+import math
+from pathlib import Path
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+
+def configure_matplotlib() -> None:
+    font_path = Path('/System/Library/Fonts/STHeiti Medium.ttc')
+    if font_path.exists():
+        matplotlib.font_manager.fontManager.addfont(font_path)
+        font_name = matplotlib.font_manager.FontProperties(fname=font_path).get_name()
+        plt.rcParams['font.family'] = font_name
+    plt.rcParams.update({'axes.unicode_minus': False, 'figure.facecolor': 'white', 'axes.facecolor': 'white', 'savefig.facecolor': 'white', 'savefig.bbox': 'tight'})
+
+def plot_sensitivity(rows: list[dict[str, object]], *, tower_rows: list[dict[str, object]], geometry_rows: list[dict[str, object]], selected_tower_mode: str, output_dir: str | Path) -> Path:
+    records = [(f"{row['parameter']}{row['direction']}", float(row['delta_q'])) for row in rows if row.get('delta_q') not in (None, '')]
+    for row in tower_rows:
+        if row.get('tower_mode') == selected_tower_mode and abs(float(row.get('delta_y_m', 99.0))) == 0.5 and (row.get('delta_q_from_six_medium') not in (None, '')):
+            direction = '+' if float(row['delta_y_m']) > 0 else '-'
+            records.append((f'yT{direction}', float(row['delta_q_from_six_medium'])))
+    for row in geometry_rows:
+        if row.get('delta_q_from_six_medium') in (None, ''):
+            continue
+        if row.get('scan') == 'D1-one-dimensional' and math.isclose(abs(float(row['delta_D1_from_six'])), 0.1, abs_tol=1e-12):
+            direction = '+' if float(row['delta_D1_from_six']) > 0 else '-'
+            records.append((f'D1{direction}', float(row['delta_q_from_six_medium'])))
+        if row.get('scan') == 'g-one-dimensional' and math.isclose(abs(float(row['delta_g_from_six'])), 0.01, abs_tol=1e-12):
+            direction = '+' if float(row['delta_g_from_six']) > 0 else '-'
+            records.append((f'g{direction}', float(row['delta_q_from_six_medium'])))
+    records.sort(key=lambda item: item[1])
+    labels = [item[0] for item in records]
+    values = [item[1] for item in records]
+    (figure, axis) = plt.subplots(figsize=(9, max(5, 0.22 * len(records))))
+    colors = ['#d95f02' if value < 0 else '#1b9e77' for value in values]
+    axis.barh(np.arange(len(values)), values, color=colors)
+    axis.set_yticks(np.arange(len(values)), labels)
+    axis.axvline(0.0, color='black', linewidth=0.8)
+    axis.set_xlabel('相对原六组中精度基准的 Δq / (kW/m²)')
+    axis.set_title('图 S3-1 塔位、Campo 与六区规格参数敏感性排序')
+    axis.grid(axis='x', alpha=0.25)
+    figure.tight_layout()
+    path = Path(output_dir) / '16_参数敏感性图.png'
+    figure.savefig(path, dpi=220)
+    plt.close(figure)
     return path
+
+def plot_group_parameters(baseline: RefineBaseline, selected: RefineDesign, output_dir: str | Path) -> Path:
+    groups = np.arange(1, 7)
+    (figure, axes) = plt.subplots(1, 3, figsize=(13, 4.2), sharex=True)
+    series = ((baseline.design.widths, selected.widths, '镜宽 / m'), (baseline.design.mirror_heights, selected.mirror_heights, '镜高 / m'), (baseline.design.installation_heights, selected.installation_heights, '安装高度 / m'))
+    for (axis, (before, after, ylabel)) in zip(axes, series):
+        axis.plot(groups, before, 'o--', label='原六组')
+        axis.plot(groups, after, 's-', label='微调后')
+        axis.set_xlabel('径向分区')
+        axis.set_ylabel(ylabel)
+        axis.set_xticks(groups)
+        axis.grid(alpha=0.25)
+    axes[0].legend()
+    figure.suptitle('图 S3-2 优化前后六区规格对比')
+    figure.tight_layout()
+    path = Path(output_dir) / '17_六区宽高与安装高度图.png'
+    figure.savefig(path, dpi=220)
+    plt.close(figure)
+    return path
+
+def plot_metric_comparison(*, baseline_formal: RefineEvaluation, candidate_formal: RefineEvaluation, dense_payload: dict[str, object], output_dir: str | Path) -> Path:
+    labels = ['正式 q', '80 m q', '100 m q']
+    baseline_dense = dense_payload.get('baseline', {})
+    candidate_dense = dense_payload.get('candidate', {})
+    before = [baseline_formal.unit_area_power_kw_m2, float(baseline_dense.get('80', {}).get('unit_area_power_kw_m2', np.nan)), float(baseline_dense.get('100', {}).get('unit_area_power_kw_m2', np.nan))]
+    after = [candidate_formal.unit_area_power_kw_m2, float(candidate_dense.get('80', {}).get('unit_area_power_kw_m2', np.nan)), float(candidate_dense.get('100', {}).get('unit_area_power_kw_m2', np.nan))]
+    x = np.arange(3)
+    width = 0.36
+    (figure, axes) = plt.subplots(1, 2, figsize=(11, 4.2))
+    axes[0].bar(x - width / 2, before, width, label='原六组')
+    axes[0].bar(x + width / 2, after, width, label='微调候选')
+    axes[0].set_xticks(x, labels)
+    axes[0].set_ylabel('q / (kW/m²)')
+    axes[0].legend()
+    axes[0].grid(axis='y', alpha=0.25)
+    powers = [baseline_formal.annual_power_mw, candidate_formal.annual_power_mw]
+    axes[1].bar(('原六组', '微调候选'), powers, color=('#7570b3', '#1b9e77'))
+    axes[1].axhline(42.0, color='#d95f02', linestyle='--', label='42 MW 约束')
+    axes[1].set_ylabel('正式年平均功率 / MW')
+    axes[1].legend()
+    axes[1].grid(axis='y', alpha=0.25)
+    figure.suptitle('图 S3-3 正式与加密结果比较')
+    figure.tight_layout()
+    path = Path(output_dir) / '18_六组与优化方案指标比较图.png'
+    figure.savefig(path, dpi=220)
+    plt.close(figure)
+    return path
+
+def generate_figures(**kwargs: object) -> tuple[Path, Path, Path]:
+    configure_matplotlib()
+    return (plot_sensitivity(kwargs['sensitivity_rows'], tower_rows=kwargs['tower_rows'], geometry_rows=kwargs['geometry_rows'], selected_tower_mode=kwargs['selected_tower_mode'], output_dir=kwargs['output_dir']), plot_group_parameters(kwargs['baseline'], kwargs['selected_design'], kwargs['output_dir']), plot_metric_comparison(baseline_formal=kwargs['baseline_formal'], candidate_formal=kwargs['candidate_formal'], dense_payload=kwargs['dense_payload'], output_dir=kwargs['output_dir']))
 
 # ========================================================================
 # 来源：src/heliostat/q3/solve.py
 # ========================================================================
 
-"""第三问命令行：异构分组搜索、删镜、正式复算和结果导出。"""
+"""六区阶梯参数微调的完整分阶段入口。"""
 import argparse
-from dataclasses import asdict, replace
+import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_Q2_SUMMARY = PROJECT_ROOT / 'outputs' / 'q2' / '07_最终方案摘要.json'
+DEFAULT_SIX_GROUP_SUMMARY = PROJECT_ROOT / 'src' / 'heliostat' / 'q3' / 'six_group_baseline.json'
 DEFAULT_TEMPLATE = PROJECT_ROOT / 'task' / 'A' / 'result3.xlsx'
 DEFAULT_OUTPUT = PROJECT_ROOT / 'outputs' / 'q3'
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='求解 CUMCM 2023 A 题第三问的分组异构定日镜场')
+    parser = argparse.ArgumentParser(description='第三问六区阶梯参数敏感性与局部微调')
     parser.add_argument('--q2-summary', type=Path, default=DEFAULT_Q2_SUMMARY)
+    parser.add_argument('--six-group-summary', type=Path, default=DEFAULT_SIX_GROUP_SUMMARY)
     parser.add_argument('--result3-template', type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument('--smoke', action='store_true')
     parser.add_argument('--target-power', type=float, default=42.0)
-    parser.add_argument('--calibration-candidates', type=int, default=6)
-    parser.add_argument('--max-cycles', type=int, default=2)
-    parser.add_argument('--prune-rounds', type=int, default=2)
-    parser.add_argument('--prune-pairs-per-round', type=int, default=10)
-    parser.add_argument('--run-validation', action='store_true')
+    parser.add_argument('--medium-limit', type=int, default=150)
+    parser.add_argument('--formal-limit', type=int, default=12)
+    parser.add_argument('--max-sweeps', type=int, default=2)
+    parser.add_argument('--move-q', type=float, default=1e-08)
     return parser
 
 def _validate_args(args: argparse.Namespace) -> None:
     if args.target_power <= 0.0:
         raise SystemExit('--target-power 必须大于 0。')
-    if args.calibration_candidates < 0:
-        raise SystemExit('--calibration-candidates 不能小于 0。')
-    if args.max_cycles < 0:
-        raise SystemExit('--max-cycles 不能小于 0。')
-    if args.prune_rounds < 0:
-        raise SystemExit('--prune-rounds 不能小于 0。')
-    if args.prune_pairs_per_round < 1:
-        raise SystemExit('--prune-pairs-per-round 必须大于等于 1。')
+    if args.medium_limit < 69 or args.medium_limit > 150:
+        raise SystemExit('--medium-limit 必须位于 69 到 150。')
+    if args.formal_limit < 12 or args.formal_limit > 12:
+        raise SystemExit('本方案严格使用 --formal-limit 12。')
+    if args.max_sweeps < 0 or args.max_sweeps > 2:
+        raise SystemExit('--max-sweeps 必须位于 0 到 2。')
+    if args.move_q < 0.0:
+        raise SystemExit('--move-q 不能小于 0。')
 
-def _reevaluate(*, source: HeterogeneousEvaluation, profile: EvaluationProfile, mother, cache: EvaluationCache) -> HeterogeneousEvaluation:
-    specifications = ExpandedSpecifications(widths=source.widths, heights=source.heights, installation_heights=source.installation_heights, areas=source.widths * source.heights)
-    return evaluate_specifications(coordinates=source.coordinates, specifications=specifications, ring_indices=source.ring_indices, group_indices=source.group_indices, original_indices=source.original_indices, field_config=field_config_from_mother(mother), profile=profile, safety_epsilon=mother.parameters.safety_epsilon, cache=cache)
+def _rank_key(evaluation: RefineEvaluation, target_power_mw: float) -> tuple[int, float]:
+    feasible = evaluation.is_feasible(target_power_mw)
+    return (int(feasible), evaluation.unit_area_power_kw_m2 if feasible else evaluation.annual_power_mw)
 
-def _formal_selection(*, outcome: SearchOutcome, pruned: HeterogeneousEvaluation, mother, profile: EvaluationProfile, target_power_mw: float, cache: EvaluationCache) -> HeterogeneousEvaluation:
-    candidates = [_reevaluate(source=outcome.baseline_evaluation, profile=profile, mother=mother, cache=cache), _reevaluate(source=outcome.best_evaluation, profile=profile, mother=mother, cache=cache)]
-    if pruned.mirror_count != outcome.best_evaluation.mirror_count:
-        candidates.append(_reevaluate(source=pruned, profile=profile, mother=mother, cache=cache))
-    feasible = [candidate for candidate in candidates if candidate.is_feasible(target_power_mw)]
-    if not feasible:
-        powers = ', '.join((f'{candidate.annual_power_mw:.6f}' for candidate in candidates))
-        raise RuntimeError(f'正式精度下没有满足功率约束的候选，候选功率为：{powers} MW。')
-    return max(feasible, key=lambda evaluation: evaluation.unit_area_power_kw_m2)
+def _better(candidate: RefineEvaluation, reference: RefineEvaluation, *, target_power_mw: float, threshold: float) -> bool:
+    candidate_feasible = candidate.is_feasible(target_power_mw)
+    reference_feasible = reference.is_feasible(target_power_mw)
+    if candidate_feasible != reference_feasible:
+        return candidate_feasible
+    if candidate_feasible:
+        return candidate.unit_area_power_kw_m2 > reference.unit_area_power_kw_m2 + threshold
+    return candidate.annual_power_mw > reference.annual_power_mw + 1e-06
+
+def _regression_payload(baseline: RefineBaseline, evaluation: RefineEvaluation) -> dict[str, object]:
+    parameter_errors = {'width_max_abs_m': float(np.max(np.abs(evaluation.specifications.widths - np.asarray(baseline.design.widths)[evaluation.field.group_indices]))), 'height_max_abs_m': float(np.max(np.abs(evaluation.specifications.heights - np.asarray(baseline.design.mirror_heights)[evaluation.field.group_indices]))), 'installation_height_max_abs_m': float(np.max(np.abs(evaluation.specifications.installation_heights - np.asarray(baseline.design.installation_heights)[evaluation.field.group_indices])))}
+    coordinate_error = float(np.max(np.abs(evaluation.field.coordinates - baseline.mother.coordinates)))
+    errors = {'mirror_count': evaluation.mirror_count - baseline.expected_mirror_count, 'coordinate_max_abs_m': coordinate_error, 'total_area_m2': evaluation.total_area_m2 - baseline.expected_total_area_m2, 'annual_power_mw': evaluation.annual_power_mw - baseline.expected_power_mw, 'unit_area_power_kw_m2': evaluation.unit_area_power_kw_m2 - baseline.expected_q_kw_m2, **parameter_errors}
+    tolerances = {'mirror_count': 0, 'coordinate_max_abs_m': 1e-12, 'total_area_m2': 1e-06, 'annual_power_mw': 1e-06, 'unit_area_power_kw_m2': 1e-09, 'width_max_abs_m': 0.0, 'height_max_abs_m': 0.0, 'installation_height_max_abs_m': 0.0}
+    passed = all((abs(float(errors[key])) <= tolerance for (key, tolerance) in tolerances.items()))
+    return {'passed': passed, 'expected': {'mirror_count': baseline.expected_mirror_count, 'total_area_m2': baseline.expected_total_area_m2, 'annual_power_mw': baseline.expected_power_mw, 'unit_area_power_kw_m2': baseline.expected_q_kw_m2}, 'actual': metrics(evaluation), 'errors': errors, 'tolerances': tolerances}
 
 def run(argv: Sequence[str] | None=None) -> int:
     args = build_parser().parse_args(argv)
     _validate_args(args)
-    mother = build_campo_mother_field(args.q2_summary)
-    cache = EvaluationCache()
-    if args.smoke:
-        coarse = smoke_profile()
-        reference = smoke_profile()
-        final = smoke_profile()
-        calibration_candidates = min(args.calibration_candidates, 1)
-        maximum_cycles = min(args.max_cycles, 1)
-        prune_rounds = min(args.prune_rounds, 1)
-        prune_pairs = min(args.prune_pairs_per_round, 2)
+    baseline = load_baseline(q2_summary_path=args.q2_summary, six_group_summary_path=args.six_group_summary)
+    search_profile = smoke_profile() if args.smoke else medium_profile()
+    verification_profile = smoke_profile() if args.smoke else formal_profile()
+    search_cache = EvaluationCache()
+    formal_cache = EvaluationCache()
+    medium_count = 0
+    formal_count = 0
+
+    def try_evaluate(design: RefineDesign, *, profile_kind: str, count_candidate: bool=True) -> tuple[RefineEvaluation | None, str | None]:
+        nonlocal medium_count, formal_count
+        if profile_kind == 'medium':
+            if count_candidate and medium_count >= args.medium_limit:
+                return (None, '达到中精度候选上限')
+            profile = search_profile
+            cache = search_cache
+        elif profile_kind == 'formal':
+            if count_candidate and formal_count >= args.formal_limit:
+                return (None, '达到正式候选上限')
+            profile = verification_profile
+            cache = formal_cache
+        else:
+            raise ValueError(profile_kind)
+        try:
+            evaluation = evaluate_design(baseline=baseline, design=design, profile=profile, cache=cache)
+        except ValueError as exc:
+            return (None, str(exc))
+        if count_candidate:
+            if profile_kind == 'medium':
+                medium_count += 1
+            else:
+                formal_count += 1
+        return (evaluation, None)
+    print('阶段 0/4：六组正式初值回归', flush=True)
+    (baseline_formal, reason) = try_evaluate(baseline.design, profile_kind='formal', count_candidate=False)
+    if baseline_formal is None:
+        raise RuntimeError(f'六组回归无法评价：{reason}')
+    regression = _regression_payload(baseline, baseline_formal)
+    if not args.smoke and (not regression['passed']):
+        raise RuntimeError(f"六组正式回归失败：{regression['errors']}")
+    print(f'回归通过：P={baseline_formal.annual_power_mw:.9f} MW，q={baseline_formal.unit_area_power_kw_m2:.9f} kW/m²', flush=True)
+    (baseline_medium, reason) = try_evaluate(baseline.design, profile_kind='medium', count_candidate=False)
+    if baseline_medium is None:
+        raise RuntimeError(f'六组中精度基准无法评价：{reason}')
+    formal_rows: list[dict[str, object]] = []
+    print('阶段 1/4：塔位模式 A/B 独立扫描', flush=True)
+    tower_internal: list[dict[str, object]] = []
+    tower_rows: list[dict[str, object]] = []
+    for mode in ('A', 'B'):
+        mode_records: list[dict[str, object]] = []
+        for delta in (-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0):
+            design = replace(baseline.design, tower_mode=mode, tower_y=baseline.design.tower_y + delta)
+            (evaluation, reject) = try_evaluate(design, profile_kind='medium')
+            row: dict[str, object] = {'tower_mode': mode, 'tower_x': 0.0, 'tower_y': design.tower_y, 'delta_y_m': delta, 'legal': evaluation is not None, 'reject_reason': reject or '', 'selected_for_formal': False}
+            if evaluation is not None:
+                row.update(metrics(evaluation, target_power_mw=args.target_power))
+                row['delta_q_from_six_medium'] = evaluation.unit_area_power_kw_m2 - baseline_medium.unit_area_power_kw_m2
+                mode_records.append({'row': row, 'design': design, 'medium': evaluation})
+            tower_rows.append(row)
+        ranked = sorted(mode_records, key=lambda item: _rank_key(item['medium'], args.target_power), reverse=True)
+        for record in ranked[:2]:
+            (evaluation, reject) = try_evaluate(record['design'], profile_kind='formal')
+            record['row']['selected_for_formal'] = True
+            record['row']['formal_reject_reason'] = reject or ''
+            if evaluation is not None:
+                record['formal'] = evaluation
+                record['row']['formal_power_mw'] = evaluation.annual_power_mw
+                record['row']['formal_q_kw_m2'] = evaluation.unit_area_power_kw_m2
+                formal_rows.append({'stage': 'tower_scan', 'candidate': f"mode-{mode}-dy-{record['row']['delta_y_m']:+g}", **metrics(evaluation, target_power_mw=args.target_power), 'delta_q_from_six': evaluation.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2})
+        tower_internal.extend(mode_records)
+    best_by_mode: dict[str, dict[str, object]] = {}
+    for mode in ('A', 'B'):
+        records = [record for record in tower_internal if record['design'].tower_mode == mode and 'formal' in record]
+        if records:
+            best_by_mode[mode] = max(records, key=lambda item: _rank_key(item['formal'], args.target_power))
+    improving_modes = {mode: record for (mode, record) in best_by_mode.items() if _better(record['formal'], baseline_formal, target_power_mw=args.target_power, threshold=args.move_q)}
+    if not improving_modes:
+        current_design = baseline.design
+        current_formal = baseline_formal
+        tower_active = False
+        tower_decision = '两种语义均无正式改善，固定原塔位并采用模式 A'
+    elif 'A' in improving_modes and 'B' in improving_modes and (abs(improving_modes['A']['formal'].unit_area_power_kw_m2 - improving_modes['B']['formal'].unit_area_power_kw_m2) <= 1e-05):
+        chosen = improving_modes['A']
+        current_design = chosen['design']
+        current_formal = chosen['formal']
+        tower_active = not math.isclose(current_design.tower_y, baseline.design.tower_y)
+        tower_decision = '两种语义接近，按文档优先采用模式 A'
     else:
-        coarse = coarse_profile()
-        reference = medium_profile()
-        final = formal_profile()
-        calibration_candidates = args.calibration_candidates
-        maximum_cycles = args.max_cycles
-        prune_rounds = args.prune_rounds
-        prune_pairs = args.prune_pairs_per_round
-    print(f'重建问题二完整 Campo 母场：{mother.mirror_count} 面，组镜数={mother.group_counts}')
-    outcome = optimize_group_design(mother=mother, coarse_profile=coarse, reference_profile=reference, target_power_mw=args.target_power, calibration_candidate_count=calibration_candidates, maximum_cycles_per_level=maximum_cycles, cache=cache, progress=print)
-    print(f'分组搜索完成：P={outcome.best_evaluation.annual_power_mw:.6f} MW，q={outcome.best_evaluation.unit_area_power_kw_m2:.6f} kW/m²')
-    pruned = outcome.best_evaluation
-    if prune_rounds and pruned.is_feasible(args.target_power):
-        pruning = prune_symmetric_pairs(mother=mother, initial=pruned, profile=reference, target_power_mw=args.target_power, maximum_rounds=prune_rounds, maximum_pairs_per_round=prune_pairs, cache=cache)
-        pruned = pruning.best
-        print(f'结构化删镜接受 {len(pruning.steps)} 轮，保留 {pruned.mirror_count} 面')
-    selected = _formal_selection(outcome=outcome, pruned=pruned, mother=mother, profile=final, target_power_mw=args.target_power, cache=cache)
-    selected_is_uniform = np.allclose(selected.widths, mother.base_width) and np.allclose(selected.heights, mother.base_height) and np.allclose(selected.installation_heights, mother.base_installation_height)
-    selected_design = outcome.baseline_design if selected_is_uniform else outcome.best_design
-    stages = list(outcome.stage_evaluations)
-    if pruned.mirror_count != outcome.best_evaluation.mirror_count:
-        stages.append(('structured-prune', pruned))
-    stages.append(('formal-final', selected))
-    calibration_payload = {**asdict(outcome.calibration), 'paired_candidate_count': len(outcome.calibration_pairs), 'note': '标定样本支持的经验误差带，不是数学严格置信界。'}
-    written = write_question3_results(output_dir=args.output, mother=mother, design=selected_design, evaluation=selected, result3_template=args.result3_template, stages=stages, calibration=calibration_payload)
-    if args.run_validation and (not args.smoke):
-        dense_settings = dense_profile()
-        dense = _reevaluate(source=selected, profile=dense_settings, mother=mother, cache=cache)
-        sensitivity_settings = replace(dense_settings, name='q3-dense-100m', solver=replace(dense_settings.solver, neighbor_radius_m=100.0))
-        sensitivity = _reevaluate(source=selected, profile=sensitivity_settings, mother=mother, cache=cache)
-        written['dense_validation'] = write_dense_validation(output_dir=args.output, evaluation=dense, profile=dense_settings, sensitivity_evaluations=((sensitivity_settings, sensitivity),))
-    print('\n第三问结果' if not args.smoke else '\n第三问烟雾测试结果')
-    print(f'镜子数：{selected.mirror_count}')
-    print(f'总镜面面积：{selected.total_area_m2:.3f} m²')
-    print(f'年平均输出热功率：{selected.annual_power_mw:.6f} MW')
-    print(f'单位镜面面积年平均输出：{selected.unit_area_power_kw_m2:.6f} kW/m²')
+        chosen = max(improving_modes.values(), key=lambda item: _rank_key(item['formal'], args.target_power))
+        current_design = chosen['design']
+        current_formal = chosen['formal']
+        tower_active = not math.isclose(current_design.tower_y, baseline.design.tower_y)
+        tower_decision = f'正式精度选择模式 {current_design.tower_mode}'
+    print(f'塔位语义：{tower_decision}；y={current_design.tower_y:.6f} m', flush=True)
+    print('阶段 2/4：D1、g 一维粗扫及 3×3 局部组合', flush=True)
+    geometry_origin = current_design
+    geometry_origin_formal = current_formal
+    geometry_internal: list[dict[str, object]] = []
+    geometry_rows: list[dict[str, object]] = []
+
+    def add_geometry(label: str, design: RefineDesign) -> None:
+        (evaluation, reject) = try_evaluate(design, profile_kind='medium')
+        row: dict[str, object] = {'scan': label, 'tower_mode': design.tower_mode, 'tower_y': design.tower_y, 'initial_spacing': design.initial_spacing, 'spacing_growth': design.spacing_growth, 'delta_D1_from_six': design.initial_spacing - baseline.design.initial_spacing, 'delta_g_from_six': design.spacing_growth - baseline.design.spacing_growth, 'legal': evaluation is not None, 'reject_reason': reject or '', 'selected_for_formal': False}
+        if evaluation is not None:
+            row.update(metrics(evaluation, target_power_mw=args.target_power))
+            row['delta_power_from_six_medium'] = evaluation.annual_power_mw - baseline_medium.annual_power_mw
+            row['delta_q_from_six_medium'] = evaluation.unit_area_power_kw_m2 - baseline_medium.unit_area_power_kw_m2
+            geometry_internal.append({'row': row, 'design': design, 'medium': evaluation})
+        geometry_rows.append(row)
+    for delta in (-0.2, -0.1, 0.0, 0.1, 0.2):
+        add_geometry('D1-one-dimensional', replace(geometry_origin, initial_spacing=baseline.design.initial_spacing + delta))
+    for delta in (-0.02, -0.01, 0.0, 0.01, 0.02):
+        add_geometry('g-one-dimensional', replace(geometry_origin, spacing_growth=baseline.design.spacing_growth + delta))
+    d_records = [record for record in geometry_internal if record['row']['scan'] == 'D1-one-dimensional']
+    g_records = [record for record in geometry_internal if record['row']['scan'] == 'g-one-dimensional']
+    best_d = max(d_records, key=lambda item: _rank_key(item['medium'], args.target_power))['design'].initial_spacing
+    best_g = max(g_records, key=lambda item: _rank_key(item['medium'], args.target_power))['design'].spacing_growth
+    for delta_d in (-0.1, 0.0, 0.1):
+        for delta_g in (-0.01, 0.0, 0.01):
+            add_geometry('D1-g-3x3', replace(geometry_origin, initial_spacing=best_d + delta_d, spacing_growth=best_g + delta_g))
+    geometry_ranked = sorted(geometry_internal, key=lambda item: _rank_key(item['medium'], args.target_power), reverse=True)
+    geometry_best = geometry_ranked[0]
+    (geometry_formal, reject) = try_evaluate(geometry_best['design'], profile_kind='formal')
+    geometry_best['row']['selected_for_formal'] = True
+    geometry_best['row']['formal_reject_reason'] = reject or ''
+    if geometry_formal is not None:
+        geometry_best['formal'] = geometry_formal
+        geometry_best['row']['formal_power_mw'] = geometry_formal.annual_power_mw
+        geometry_best['row']['formal_q_kw_m2'] = geometry_formal.unit_area_power_kw_m2
+        formal_rows.append({'stage': 'campo_geometry', 'candidate': 'best-medium-geometry', **metrics(geometry_formal, target_power_mw=args.target_power), 'delta_q_from_six': geometry_formal.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2})
+        if _better(geometry_formal, geometry_origin_formal, target_power_mw=args.target_power, threshold=args.move_q):
+            current_design = geometry_best['design']
+            current_formal = geometry_formal
+    geometry_active = tuple((parameter for parameter in ('initial_spacing', 'spacing_growth') if not math.isclose(current_design.parameter(parameter), geometry_origin.parameter(parameter))))
+    print(f'几何固定点：D1={current_design.initial_spacing:.6f} m，g={current_design.spacing_growth:.6f} m/环', flush=True)
+    print('阶段 3/4：18 个六区规格变量正负敏感性', flush=True)
+    (sensitivity_reference, reason) = try_evaluate(current_design, profile_kind='medium', count_candidate=False)
+    if sensitivity_reference is None:
+        raise RuntimeError(f'敏感性中精度基准无法评价：{reason}')
+    sensitivity_rows: list[dict[str, object]] = []
+    sensitivity_designs: dict[tuple[str, str], RefineDesign] = {}
+    for perturbation in specification_perturbations(current_design):
+        (evaluation, reject) = try_evaluate(perturbation.design, profile_kind='medium')
+        row: dict[str, object] = {'parameter': perturbation.parameter, 'group_id': perturbation.group_id, 'old_value': perturbation.old_value, 'new_value': perturbation.new_value, 'direction': perturbation.direction, 'legal': evaluation is not None, 'medium_power': None, 'medium_q': None, 'delta_power': None, 'delta_q': None, 'formal_power': None, 'formal_q': None, 'active': False, 'reject_reason': reject or ''}
+        if evaluation is not None:
+            row.update({'medium_power': evaluation.annual_power_mw, 'medium_q': evaluation.unit_area_power_kw_m2, 'delta_power': evaluation.annual_power_mw - baseline_medium.annual_power_mw, 'delta_q': evaluation.unit_area_power_kw_m2 - baseline_medium.unit_area_power_kw_m2, 'delta_power_from_geometry': evaluation.annual_power_mw - sensitivity_reference.annual_power_mw, 'delta_q_from_geometry': evaluation.unit_area_power_kw_m2 - sensitivity_reference.unit_area_power_kw_m2})
+            sensitivity_designs[perturbation.parameter, perturbation.direction] = perturbation.design
+        sensitivity_rows.append(row)
+    selected_directions = select_formal_directions(sensitivity_rows, limit=6)
+    for row in selected_directions:
+        design = sensitivity_designs[str(row['parameter']), str(row['direction'])]
+        (evaluation, reject) = try_evaluate(design, profile_kind='formal')
+        if evaluation is None:
+            row['reject_reason'] = reject or '正式复算失败'
+            continue
+        row['formal_power'] = evaluation.annual_power_mw
+        row['formal_q'] = evaluation.unit_area_power_kw_m2
+        row['active'] = evaluation.is_feasible(args.target_power) and evaluation.unit_area_power_kw_m2 > current_formal.unit_area_power_kw_m2 + args.move_q
+        formal_rows.append({'stage': 'specification_sensitivity', 'candidate': f"{row['parameter']}{row['direction']}", **metrics(evaluation, target_power_mw=args.target_power), 'delta_q_from_six': evaluation.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2})
+    specification_active = active_from_formal(sensitivity_rows, reference_q=current_formal.unit_area_power_kw_m2, target_power_mw=args.target_power, threshold=args.move_q)
+    active_variables = (*(('tower_y',) if tower_active else ()), *geometry_active, *specification_active)
+    print(f"正式确认的活跃变量：{active_variables or '无'}", flush=True)
+    print('阶段 4/4：活跃变量两轮分块回扫及统一验收', flush=True)
+    local_initial = sensitivity_reference
+
+    def local_evaluator(design: RefineDesign) -> RefineEvaluation | None:
+        (evaluation, reject_reason) = try_evaluate(design, profile_kind='medium')
+        if evaluation is None and reject_reason == '达到中精度候选上限':
+            return None
+        return evaluation
+    search = coordinate_search(initial_design=current_design, initial_evaluation=local_initial, active_variables=active_variables, evaluator=local_evaluator, baseline_q_kw_m2=baseline_medium.unit_area_power_kw_m2, maximum_sweeps=args.max_sweeps, target_power_mw=args.target_power, move_q_threshold=args.move_q)
+    (attempted_formal, reason) = try_evaluate(search.best_design, profile_kind='formal')
+    if attempted_formal is None:
+        raise RuntimeError(f'最终候选正式复算失败：{reason}')
+    formal_rows.append({'stage': 'final_acceptance', 'candidate': 'local-search-best', **metrics(attempted_formal, target_power_mw=args.target_power), 'delta_q_from_six': attempted_formal.unit_area_power_kw_m2 - baseline_formal.unit_area_power_kw_m2})
+    dense_payload: dict[str, object] = {'status': 'not-run-formal-candidate-failed', 'baseline': {}, 'candidate': {}}
+    formal_pass = _better(attempted_formal, baseline_formal, target_power_mw=args.target_power, threshold=0.0)
+    dense_pass = False
+    if args.smoke:
+        dense_payload['status'] = 'smoke-skipped'
+    elif formal_pass:
+        dense_payload['status'] = 'completed'
+        dense_cache = EvaluationCache()
+        dense_pass = True
+        for radius in (80.0, 100.0):
+            profile = dense_profile(neighbor_radius_m=radius)
+            baseline_dense = evaluate_design(baseline=baseline, design=baseline.design, profile=profile, cache=dense_cache)
+            candidate_dense = evaluate_design(baseline=baseline, design=search.best_design, profile=profile, cache=dense_cache)
+            key = f'{int(radius)}'
+            dense_payload['baseline'][key] = metrics(baseline_dense, target_power_mw=args.target_power)
+            dense_payload['candidate'][key] = metrics(candidate_dense, target_power_mw=args.target_power)
+            dense_pass = dense_pass and candidate_dense.is_feasible(args.target_power) and (candidate_dense.unit_area_power_kw_m2 > baseline_dense.unit_area_power_kw_m2)
+        dense_payload['passed'] = dense_pass
+    accepted = formal_pass and (args.smoke or dense_pass)
+    if accepted:
+        selected_design = search.best_design
+        selected_formal = attempted_formal
+        decision = '微调方案通过统一正式与加密验收' if not args.smoke else 'smoke 链路通过'
+    else:
+        selected_design = baseline.design
+        selected_formal = baseline_formal
+        decision = '微调候选未通过统一验收，保留原六组正式方案'
+    active_payload = {'tower_mode_decision': tower_decision, 'selected_tower_mode': current_design.tower_mode, 'active_variables': list(active_variables), 'tower_active': tower_active, 'geometry_active': list(geometry_active), 'specification_active': list(specification_active), 'medium_candidate_count': medium_count, 'medium_candidate_limit': args.medium_limit, 'formal_candidate_count': formal_count, 'formal_candidate_limit': args.formal_limit, 'maximum_joint_sweeps': args.max_sweeps}
+    regression['smoke'] = args.smoke
+    regression['candidate_budgets'] = {'medium': {'used': medium_count, 'limit': args.medium_limit}, 'formal': {'used': formal_count, 'limit': args.formal_limit}}
+    written = write_results(output_dir=args.output, baseline=baseline, regression=regression, tower_rows=tower_rows, geometry_rows=geometry_rows, sensitivity_rows=sensitivity_rows, active_payload=active_payload, search_trace=search.trace, formal_rows=formal_rows, baseline_formal=baseline_formal, attempted_formal=attempted_formal, selected_formal=selected_formal, selected_design=selected_design, dense_payload=dense_payload, result3_template=args.result3_template, target_power_mw=args.target_power, decision=decision)
+    figures = generate_figures(sensitivity_rows=sensitivity_rows, tower_rows=tower_rows, geometry_rows=geometry_rows, selected_tower_mode=current_design.tower_mode, baseline=baseline, selected_design=selected_design, baseline_formal=baseline_formal, candidate_formal=attempted_formal, dense_payload=dense_payload, output_dir=args.output)
+    for (index, path) in enumerate(figures, start=16):
+        written[f'figure_{index}'] = path
+    print('\n六区参数微调结果', flush=True)
+    print(f'判定：{decision}', flush=True)
+    print(f'正式候选：P={attempted_formal.annual_power_mw:.9f} MW', flush=True)
+    print(f'正式候选：q={attempted_formal.unit_area_power_kw_m2:.9f} kW/m²', flush=True)
+    print(f'候选预算：medium={medium_count}/{args.medium_limit}，formal={formal_count}/{args.formal_limit}', flush=True)
     for path in written.values():
-        print(f'输出：{path}')
+        print(f'输出：{path}', flush=True)
     return 0
 
 def main() -> None:

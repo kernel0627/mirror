@@ -1,206 +1,123 @@
 from __future__ import annotations
 
-import json
-import tempfile
 import unittest
 from dataclasses import replace
-from pathlib import Path
 
 import numpy as np
-from openpyxl import load_workbook
 
 from heliostat.q3.evaluate import (
     EvaluationCache,
     evaluate_design,
+    prepare_candidate,
     smoke_profile,
 )
-from heliostat.q3.export import (
-    write_dense_validation,
-    write_result3_workbook,
-)
-from heliostat.q3.model import (
-    EXPECTED_GROUP_COUNTS,
-    GroupDesign,
-    build_campo_mother_field,
-    expand_group_design,
-    group_width_caps,
-    validate_heterogeneous_field,
-)
-from heliostat.q3.search import transfer_area
+from heliostat.q3.model import load_baseline
+from heliostat.q3.sensitivity import specification_perturbations
+from heliostat.q3.search import coordinate_search
+from heliostat.q3.tower_modes import build_refine_field
 
 
-class Question3ModelTests(unittest.TestCase):
+class SixGroupRefineModelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.mother = build_campo_mother_field(
-            "outputs/q2/07_最终方案摘要.json"
+        cls.baseline = load_baseline(
+            q2_summary_path="outputs/q2/07_最终方案摘要.json",
+            six_group_summary_path="src/heliostat/q3/six_group_baseline.json",
         )
 
-    def test_mother_field_has_recorded_group_structure(self) -> None:
-        self.assertEqual(self.mother.mirror_count, 1471)
-        self.assertEqual(
-            self.mother.group_counts,
-            EXPECTED_GROUP_COUNTS,
+    def test_zero_increment_reproduces_mother_field_and_specs(self) -> None:
+        field, specifications, check = prepare_candidate(
+            baseline=self.baseline,
+            design=self.baseline.design,
+        )
+        self.assertTrue(check.valid, check.reason)
+        self.assertEqual(field.mirror_count, 1471)
+        self.assertEqual(field.group_counts, (72, 269, 283, 224, 357, 266))
+        np.testing.assert_allclose(
+            field.coordinates,
+            self.baseline.mother.coordinates,
+            rtol=0.0,
+            atol=1e-12,
         )
         np.testing.assert_array_equal(
-            np.unique(self.mother.group_indices),
-            np.arange(6),
+            specifications.widths,
+            np.asarray(self.baseline.design.widths)[field.group_indices],
+        )
+        np.testing.assert_array_equal(
+            specifications.heights,
+            np.asarray(self.baseline.design.mirror_heights)[field.group_indices],
         )
 
-    def test_uniform_design_is_geometrically_legal(self) -> None:
-        design = GroupDesign.uniform(
-            self.mother.base_installation_height
+    def test_mode_b_moves_only_tower(self) -> None:
+        design = replace(
+            self.baseline.design,
+            tower_mode="B",
+            tower_y=self.baseline.design.tower_y - 0.5,
         )
-        specs = expand_group_design(self.mother, design)
-        check = validate_heterogeneous_field(
-            coordinates=self.mother.coordinates,
-            widths=specs.widths,
-            heights=specs.heights,
-            installation_heights=specs.installation_heights,
-            tower_x=self.mother.parameters.tower_x,
-            tower_y=self.mother.parameters.tower_y,
-            safety_epsilon=self.mother.parameters.safety_epsilon,
+        field = build_refine_field(self.baseline, design)
+        baseline_field = build_refine_field(self.baseline, self.baseline.design)
+        np.testing.assert_array_equal(field.coordinates, baseline_field.coordinates)
+        self.assertEqual(field.mirror_set_hash, baseline_field.mirror_set_hash)
+        self.assertEqual(field.geometry_center_y, self.baseline.design.tower_y)
+
+    def test_mode_a_rebuilds_around_candidate_tower(self) -> None:
+        design = replace(
+            self.baseline.design,
+            tower_mode="A",
+            tower_y=self.baseline.design.tower_y - 0.5,
+        )
+        field = build_refine_field(self.baseline, design)
+        self.assertEqual(field.geometry_center_y, design.tower_y)
+        first_ring = field.ring_indices == 1
+        baseline_first = self.baseline.mother.ring_indices == 1
+        np.testing.assert_allclose(
+            field.coordinates[first_ring, 1],
+            self.baseline.mother.coordinates[baseline_first, 1] - 0.5,
+            rtol=0.0,
+            atol=1e-12,
         )
 
-        self.assertTrue(check.valid, check.reason)
-        self.assertGreaterEqual(
-            check.minimum_width_clearance_m,
-            0.01 - 1e-9,
-        )
-        caps = group_width_caps(self.mother)
+    def test_sensitivity_has_36_single_parameter_candidates(self) -> None:
+        perturbations = specification_perturbations(self.baseline.design)
+        self.assertEqual(len(perturbations), 36)
+        self.assertEqual(len({item.parameter for item in perturbations}), 18)
+        candidate = next(item for item in perturbations if item.parameter == "w3" and item.direction == "+")
         self.assertAlmostEqual(
-            caps[0],
-            self.mother.base_width,
-            places=9,
+            candidate.design.widths[2],
+            self.baseline.design.widths[2] + 0.1,
         )
-        self.assertGreater(caps[2], 8.0 - 1e-9)
+        np.testing.assert_array_equal(
+            candidate.design.mirror_heights,
+            self.baseline.design.mirror_heights,
+        )
 
-    def test_area_transfer_conserves_total_area(self) -> None:
-        design = GroupDesign.uniform(
-            self.mother.base_installation_height
-        )
-        base_area = self.mother.base_width * self.mother.base_height
-        transferred = transfer_area(
-            design=design,
-            source_group=3,
-            target_group=2,
-            delta_area_m2=100.0,
-            group_counts=self.mother.group_counts,
-            base_mirror_area_m2=base_area,
-        )
-        before = sum(
-            count * base_area * scale**2
-            for count, scale in zip(
-                self.mother.group_counts,
-                design.scales,
-            )
-        )
-        after = sum(
-            count * base_area * scale**2
-            for count, scale in zip(
-                self.mother.group_counts,
-                transferred.scales,
-            )
-        )
-        self.assertAlmostEqual(after, before, places=9)
-
-
-class Question3EvaluationTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.mother = build_campo_mother_field(
-            "outputs/q2/07_最终方案摘要.json"
-        )
-        cls.design = GroupDesign.uniform(
-            cls.mother.base_installation_height
-        )
-        cls.evaluation = evaluate_design(
-            mother=cls.mother,
-            design=cls.design,
+    def test_smoke_evaluation_accepts_zero_increment(self) -> None:
+        evaluation = evaluate_design(
+            baseline=self.baseline,
+            design=self.baseline.design,
             profile=smoke_profile(),
             cache=EvaluationCache(),
         )
+        self.assertEqual(evaluation.mirror_count, 1471)
+        self.assertTrue(evaluation.geometry.valid)
+        self.assertGreater(evaluation.annual_power_mw, 0.0)
 
-    def test_smoke_evaluation_uses_all_mirrors(self) -> None:
-        self.assertEqual(self.evaluation.mirror_count, 1471)
-        self.assertGreater(self.evaluation.annual_power_mw, 0.0)
-        self.assertGreater(
-            self.evaluation.unit_area_power_kw_m2,
-            0.0,
+    def test_search_trace_uses_explicit_six_group_reference(self) -> None:
+        evaluation = evaluate_design(
+            baseline=self.baseline,
+            design=self.baseline.design,
+            profile=smoke_profile(),
+            cache=EvaluationCache(),
         )
-        self.assertTrue(self.evaluation.geometry.valid)
-
-    def test_result3_export_contains_individual_specs(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / "result3.xlsx"
-            write_result3_workbook(
-                template_path="task/A/result3.xlsx",
-                output_path=output,
-                evaluation=self.evaluation,
-                tower_x=self.mother.parameters.tower_x,
-                tower_y=self.mother.parameters.tower_y,
-            )
-            workbook = load_workbook(
-                output,
-                read_only=True,
-                data_only=True,
-            )
-            sheet = workbook.active
-            self.assertEqual(
-                sheet.max_row,
-                self.evaluation.mirror_count + 1,
-            )
-            self.assertAlmostEqual(
-                sheet.cell(2, 4).value,
-                float(self.evaluation.widths[0]),
-            )
-            self.assertAlmostEqual(
-                sheet.cell(2, 5).value,
-                float(self.evaluation.heights[0]),
-            )
-            self.assertAlmostEqual(
-                sheet.cell(2, 8).value,
-                float(self.evaluation.installation_heights[0]),
-            )
-            workbook.close()
-
-    def test_dense_validation_records_neighbor_sensitivity_once(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary)
-            table_path = output / "08_论文结果与验证表.md"
-            table_path.write_text("# 第三问结果\n", encoding="utf-8")
-            profile_80 = smoke_profile()
-            profile_100 = replace(
-                profile_80,
-                name="smoke-100m",
-                solver=replace(
-                    profile_80.solver,
-                    neighbor_radius_m=100.0,
-                ),
-            )
-            arguments = {
-                "output_dir": output,
-                "evaluation": self.evaluation,
-                "profile": profile_80,
-                "sensitivity_evaluations": (
-                    (profile_100, self.evaluation),
-                ),
-            }
-            write_dense_validation(**arguments)
-            write_dense_validation(**arguments)
-
-            payload = json.loads(
-                (output / "09_高精度加密验证.json").read_text(
-                    encoding="utf-8"
-                )
-            )
-            self.assertEqual(
-                len(payload["neighbor_radius_sensitivity"]),
-                2,
-            )
-            table = table_path.read_text(encoding="utf-8")
-            self.assertEqual(table.count("## 表 6 "), 1)
-            self.assertIn("| 100 ", table)
+        outcome = coordinate_search(
+            initial_design=self.baseline.design,
+            initial_evaluation=evaluation,
+            active_variables=(),
+            evaluator=lambda design: evaluation,
+            baseline_q_kw_m2=0.5,
+            maximum_sweeps=0,
+        )
+        self.assertEqual(outcome.trace, ())
 
 
 if __name__ == "__main__":
