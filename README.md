@@ -114,6 +114,11 @@
 │   └── heliostat3DApp.py            # 镜场三维交互查看工具
 └── outputs/                         # 完整计算生成的正式结果
     ├── README.md                    # 所有输出文件的逐项说明
+    ├── appendix/                    # 论文附录用的四文件精简代码
+    │   ├── Public.py               # 三问共用的基础光学与数值算法
+    │   ├── Q1.py                   # 第一问评价、汇总与导出
+    │   ├── Q2.py                   # 第二问布局、搜索、修剪与导出
+    │   └── Q3.py                   # 第三问六区模型、搜索、收口与导出
     ├── q1/
     │   ├── 01_第一问完整代码.py
     │   ├── 02_逐时刻计算结果.csv
@@ -171,6 +176,7 @@
 - `src/heliostat/` 是正式实现，三问入口只负责解析参数并调用对应模块；
 - `docs/questions/` 解释模型、公式、数值方法和结果；
 - `tests/` 检查共用物理模型、三问计算逻辑及 Excel 交付格式；
+- `outputs/appendix/` 是论文附录代码，只保留一个项目内公共算法文件和三个问题程序；
 - `outputs/q1/`、`outputs/q2/`、`outputs/q3/` 保存完整计算产生的结果；
 - 各输出目录中的 `01_第X问完整代码.py` 是便于独立运行和展示的合并程序，
   日常维护仍以 `src/` 下的模块化源码为准。
@@ -178,6 +184,32 @@
 更详细的模块依赖和修改影响见
 [`docs/WORK_BREAKDOWN.md`](docs/WORK_BREAKDOWN.md)，每个输出文件的内容见
 [`outputs/README.md`](outputs/README.md)。
+
+## 论文附录代码
+
+`outputs/appendix/` 固定只放四个 Python 文件，不再拆分子模块：
+
+| 文件 | 当前行数 | 内容 |
+| --- | ---: | --- |
+| `Public.py` | 574 | 太阳位置、镜面几何、阴影遮挡、截断效率、数据读取和年度评价等三问共用算法 |
+| `Q1.py` | 102 | 第一问的评价、汇总、验证和结果导出 |
+| `Q2.py` | 1042 | 第二问需要的布局生成、候选评价、参数搜索、镜位修剪和结果导出 |
+| `Q3.py` | 1822 | 第三问需要的 Campo 母场、六区异构模型、敏感性分析、局部搜索、收口验证和结果导出 |
+
+`Q1.py`、`Q2.py`、`Q3.py` 的本地依赖只有同目录的 `Public.py`。
+各问专用的布局、搜索、验证和导出算法都保留在对应问题文件中。
+NumPy、SciPy、openpyxl 和 Matplotlib 等外部库按根目录
+`requirements.txt` 安装，不将它们的源码复制到附录。
+
+在仓库根目录可分别运行：
+
+```bash
+python outputs/appendix/Q1.py
+python outputs/appendix/Q2.py
+python outputs/appendix/Q3.py
+```
+
+四文件附录用于论文展示和复现，日常修改仍以 `src/` 中的正式源码为准。
 
 ## 文档说明
 
@@ -303,7 +335,8 @@ PYTHONPATH=src python src/solve_q3.py \
 - `20_六区边界局部敏感性检验.csv`：18 个边界候选的完整结果；
 - `result3.xlsx`：按题目模板生成的第三问提交文件。
 
-修改第三问模块后，使用以下命令同步单文件程序：
+修改第三问模块后，使用以下命令同步
+`outputs/q3/01_第三问完整代码.py`：
 
 ```bash
 python tool/build_q3_bundle.py
